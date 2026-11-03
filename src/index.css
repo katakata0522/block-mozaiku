@@ -1,0 +1,29 @@
+@import "tailwindcss";
+@custom-variant dark (&:where(.dark, .dark *));
+
+@layer base {
+  :root {
+    font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Hiragino Kaku Gothic ProN", "Yu Gothic UI", "Meiryo", "Noto Sans JP", system-ui, sans-serif;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  body {
+    background-color: #0f172a;
+    color: #f8fafc;
+    margin: 0;
+    padding: 0;
+    overflow-x: hidden;
+  }
+}
+
+.touch-drag-zone {
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.no-select {
+  user-select: none;
+  -webkit-user-select: none;
+}
+

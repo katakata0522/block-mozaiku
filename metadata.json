@@ -1,0 +1,6 @@
+{
+  "name": "モザイクブレイク — 小試作MVP",
+  "description": "「壊すほど絵が見える。でも少ししか見えていないうちに当てたい」を検証する、1人用・全3問のブロック崩し×画像当てゲーム試作版。",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

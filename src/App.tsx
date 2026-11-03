@@ -1,0 +1,1798 @@
+/**
+ * @license
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+import React, { useCallback, useEffect, useRef, useState } from 'react';
+import {
+  Volume2,
+  VolumeX,
+  Play,
+  Pause,
+  Heart,
+  Clock,
+  ChevronLeft,
+  ChevronRight,
+  Crosshair,
+  Home,
+  CheckCircle2,
+  Timer,
+} from 'lucide-react';
+import {
+  PUZZLE_STAGES,
+  PuzzleStage,
+  judgeStageAnswer,
+  preloadStagePhotos,
+  renderStageArtworkToCanvas,
+} from './data/puzzles';
+import {
+  GRID_COLS,
+  GRID_ROWS,
+  TOTAL_TILES,
+  STAGE_TIME_LIMIT_SEC,
+  MAX_LIVES,
+  DEFAULT_MAX_HP,
+  CANVAS_WIDTH,
+  CANVAS_HEIGHT,
+  TILE_AREA_TOP,
+  TILE_AREA_HEIGHT,
+  TILE_AREA_LEFT,
+  TILE_AREA_WIDTH,
+  PADDLE_Y,
+  PADDLE_WIDTH,
+  PADDLE_HEIGHT,
+  BALL_RADIUS,
+  BASE_BALL_SPEED,
+  GamePhase,
+  ResolutionType,
+  PauseReason,
+  TileState,
+  StageScoreRecord,
+  HitParticle,
+  FloatingFeedback,
+  calculateStageMetrics,
+  getSpeedRank,
+} from './types/game';
+import { TitleScreen } from './components/TitleScreen';
+import { SummaryScreen } from './components/SummaryScreen';
+import { AnswerDock, StageResultDock } from './components/GameModalsAndDocks';
+import { soundEngine } from './utils/sound';
+
+function traceRoundedRect(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  w: number,
+  h: number,
+  r: number
+) {
+  const radius = Math.max(0, Math.min(r, w / 2, h / 2));
+  ctx.beginPath();
+  if (typeof ctx.roundRect === 'function') {
+    ctx.roundRect(x, y, w, h, radius);
+  } else {
+    ctx.moveTo(x + radius, y);
+    ctx.arcTo(x + w, y, x + w, y + h, radius);
+    ctx.arcTo(x + w, y + h, x, y + h, radius);
+    ctx.arcTo(x, y + h, x, y, radius);
+    ctx.arcTo(x, y, x + w, y, radius);
+    ctx.closePath();
+  }
+}
+
+export default function App() {
+  // --- 設定 ---
+  const [isMuted, setIsMuted] = useState<boolean>(false);
+  const [isPracticeMode, setIsPracticeMode] = useState<boolean>(false);
+  const [catchAndAimMode, setCatchAndAimMode] = useState<boolean>(false);
+
+  // --- ゲーム進行状態 ---
+  const [phase, setPhase] = useState<GamePhase>('TITLE');
+  const [currentStageIndex, setCurrentStageIndex] = useState<number>(0);
+  const [isStageReplayPractice, setIsStageReplayPractice] = useState<boolean>(false);
+  const [lives, setLives] = useState<number>(MAX_LIVES);
+  const [remainingSeconds, setRemainingSeconds] = useState<number>(STAGE_TIME_LIMIT_SEC);
+  const [stageMetrics, setStageMetrics] = useState<{
+    clearedCount: number;
+    damagedCount: number;
+    unharmedCount: number;
+    remainingHp: number;
+    maxTotalHp: number;
+    mosaicPercent: number;
+    exposurePercent: number;
+    mosaicBonus: number;
+    speedBonus: number;
+    elapsedSec: number;
+    potentialNormalScore: number;
+  }>({
+    clearedCount: 0,
+    damagedCount: 0,
+    unharmedCount: TOTAL_TILES,
+    remainingHp: TOTAL_TILES * DEFAULT_MAX_HP,
+    maxTotalHp: TOTAL_TILES * DEFAULT_MAX_HP,
+    mosaicPercent: 100,
+    exposurePercent: 0,
+    mosaicBonus: 500,
+    speedBonus: 200,
+    elapsedSec: 0,
+    potentialNormalScore: 800,
+  });
+
+  const [pauseReason, setPauseReason] = useState<PauseReason>('MANUAL');
+  const [countdownValue, setCountdownValue] = useState<number>(3);
+  const [phaseBeforePause, setPhaseBeforePause] = useState<'PLAYING' | 'READY'>('PLAYING');
+  const phaseBeforePauseRef = useRef<'PLAYING' | 'READY'>('PLAYING');
+  phaseBeforePauseRef.current = phaseBeforePause;
+
+  // --- 回答・結果状態 ---
+  const [answerInput, setAnswerInput] = useState<string>('');
+  const [answerFeedback, setAnswerFeedback] = useState<{
+    type: 'EMPTY' | 'WRONG' | null;
+    message: string;
+  }>({ type: null, message: '' });
+  const [lastChanceReason, setLastChanceReason] = useState<
+    'ALL_TILES_CLEARED' | 'OUT_OF_LIVES' | 'TIME_UP'
+  >('ALL_TILES_CLEARED');
+  const [currentStageRecord, setCurrentStageRecord] = useState<StageScoreRecord | null>(null);
+  const [stageRecords, setStageRecords] = useState<Record<number, StageScoreRecord>>({});
+
+  // --- 物理・4段階（3回ヒット制: 100% -> 70% -> 40% -> 0%クリア枠）Canvas用Ref ---
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  // 0% モザイク（原画 100% クリア）
+  const offscreenArtworkRef = useRef<HTMLCanvasElement | null>(null);
+  // 100% モザイク（hp = 3）
+  const offscreenMosaic100Ref = useRef<HTMLCanvasElement | null>(null);
+  // 70% モザイク（hp = 2）
+  const offscreenMosaic70Ref = useRef<HTMLCanvasElement | null>(null);
+  // 40% モザイク（hp = 1、次は0%で割れる！）
+  const offscreenMosaic40Ref = useRef<HTMLCanvasElement | null>(null);
+  const scratchDownsampleCanvasRef = useRef<HTMLCanvasElement | null>(null);
+
+  const tilesRef = useRef<TileState[]>([]);
+  const paddleXRef = useRef<number>((CANVAS_WIDTH - PADDLE_WIDTH) / 2);
+  const ballRef = useRef<{
+    x: number;
+    y: number;
+    vx: number;
+    vy: number;
+    attachedToPaddle: boolean;
+    attachOffsetX: number;
+  }>({
+    x: CANVAS_WIDTH / 2,
+    y: PADDLE_Y - BALL_RADIUS - 2,
+    vx: 0,
+    vy: 0,
+    attachedToPaddle: true,
+    attachOffsetX: 0,
+  });
+  const particlesRef = useRef<HitParticle[]>([]);
+  const floatingFeedbacksRef = useRef<FloatingFeedback[]>([]);
+  const comboRef = useRef<number>(0);
+  const remainingTimeMsRef = useRef<number>(STAGE_TIME_LIMIT_SEC * 1000);
+  const lastDisplayedSecRef = useRef<number>(STAGE_TIME_LIMIT_SEC);
+  const elapsedMsRef = useRef<number>(0);
+  const lastMetricsSecRef = useRef<number>(0);
+  const lastDisplayedTenthRef = useRef<number>(0);
+  // Reactの再レンダリングを発生させずにヘッダーの0.1秒ストップウォッチを滑らかに更新するDOM Ref
+  const elapsedTimerSpanRef = useRef<HTMLSpanElement | null>(null);
+
+  // 入力・ドラッグ状態Ref
+  const keysPressedRef = useRef<{ left: boolean; right: boolean }>({ left: false, right: false });
+  const buttonHoldRef = useRef<{ left: boolean; right: boolean }>({ left: false, right: false });
+  const isSubmittingAnswerRef = useRef<boolean>(false);
+  const answerInputElementRef = useRef<HTMLInputElement | null>(null);
+
+  // 最新ステート同期用Ref
+  const phaseRef = useRef<GamePhase>(phase);
+  phaseRef.current = phase;
+  const currentStageIndexRef = useRef<number>(currentStageIndex);
+  currentStageIndexRef.current = currentStageIndex;
+  const livesRef = useRef<number>(lives);
+  livesRef.current = lives;
+  const isPracticeModeRef = useRef<boolean>(isPracticeMode);
+  isPracticeModeRef.current = isPracticeMode;
+  const isStageReplayPracticeRef = useRef<boolean>(isStageReplayPractice);
+  isStageReplayPracticeRef.current = isStageReplayPractice;
+  const catchAndAimModeRef = useRef<boolean>(catchAndAimMode);
+  catchAndAimModeRef.current = catchAndAimMode;
+
+  const currentStage: PuzzleStage = PUZZLE_STAGES[currentStageIndex] || PUZZLE_STAGES[0];
+
+  const clearAllMovementInputs = useCallback(() => {
+    keysPressedRef.current.left = false;
+    keysPressedRef.current.right = false;
+    buttonHoldRef.current.left = false;
+    buttonHoldRef.current.right = false;
+  }, []);
+
+  /**
+   * 1枚の実写写真（TILE_AREA_WIDTH × TILE_AREA_HEIGHT = 600×310）から、
+   * 3回ヒット制（100% -> 70% -> 40% -> 0%原画）のモザイクレイヤーを生成する
+   */
+  const prepareOffscreenArtwork = useCallback((stageId: number) => {
+    const photoW = TILE_AREA_WIDTH;
+    const photoH = TILE_AREA_HEIGHT;
+
+    if (!offscreenArtworkRef.current) {
+      offscreenArtworkRef.current = document.createElement('canvas');
+    }
+    const artCanvas = offscreenArtworkRef.current;
+    artCanvas.width = photoW;
+    artCanvas.height = photoH;
+    const artCtx = artCanvas.getContext('2d');
+    if (artCtx) {
+      renderStageArtworkToCanvas(artCtx, stageId, photoW, photoH);
+    }
+
+    if (!scratchDownsampleCanvasRef.current) {
+      scratchDownsampleCanvasRef.current = document.createElement('canvas');
+    }
+    const scratchCanvas = scratchDownsampleCanvasRef.current;
+
+    const createPixelatedLayer = (
+      targetRef: React.MutableRefObject<HTMLCanvasElement | null>,
+      blockSizePx: number,
+      veilAlpha: number
+    ) => {
+      if (!targetRef.current) {
+        targetRef.current = document.createElement('canvas');
+      }
+      const pCanvas = targetRef.current;
+      pCanvas.width = photoW;
+      pCanvas.height = photoH;
+
+      const smallW = Math.max(8, Math.floor(photoW / blockSizePx));
+      const smallH = Math.max(5, Math.floor(photoH / blockSizePx));
+      scratchCanvas.width = smallW;
+      scratchCanvas.height = smallH;
+
+      const sCtx = scratchCanvas.getContext('2d');
+      const pCtx = pCanvas.getContext('2d');
+      if (sCtx && pCtx) {
+        sCtx.imageSmoothingEnabled = true;
+        sCtx.clearRect(0, 0, smallW, smallH);
+        sCtx.drawImage(artCanvas, 0, 0, smallW, smallH);
+
+        pCtx.clearRect(0, 0, photoW, photoH);
+        pCtx.imageSmoothingEnabled = false;
+        pCtx.drawImage(scratchCanvas, 0, 0, smallW, smallH, 0, 0, photoW, photoH);
+
+        if (veilAlpha > 0) {
+          pCtx.fillStyle = `rgba(9, 13, 22, ${veilAlpha})`;
+          pCtx.fillRect(0, 0, photoW, photoH);
+        }
+
+        pCtx.strokeStyle = 'rgba(15, 23, 42, 0.2)';
+        pCtx.lineWidth = 1;
+        pCtx.beginPath();
+        for (let gx = blockSizePx; gx < photoW; gx += blockSizePx) {
+          pCtx.moveTo(gx + 0.5, 0);
+          pCtx.lineTo(gx + 0.5, photoH);
+        }
+        for (let gy = blockSizePx; gy < photoH; gy += blockSizePx) {
+          pCtx.moveTo(0, gy + 0.5);
+          pCtx.lineTo(photoW, gy + 0.5);
+        }
+        pCtx.stroke();
+      }
+    };
+
+    createPixelatedLayer(offscreenMosaic100Ref, 48, 0.14);
+    createPixelatedLayer(offscreenMosaic70Ref, 24, 0.08);
+    createPixelatedLayer(offscreenMosaic40Ref, 12, 0.04);
+  }, []);
+
+  useEffect(() => {
+    return preloadStagePhotos((loadedStageId) => {
+      const activeStage = PUZZLE_STAGES[currentStageIndexRef.current] || PUZZLE_STAGES[0];
+      if (activeStage.id === loadedStageId) {
+        prepareOffscreenArtwork(loadedStageId);
+      }
+    });
+  }, [prepareOffscreenArtwork]);
+
+  // --- 6×5 モザイクゾーン配列の生成（3回ヒット制: 100% -> 70% -> 40% -> 0%クリア枠） ---
+  const createInitialTiles = useCallback(
+    (stage: PuzzleStage, maxHp: number = DEFAULT_MAX_HP): TileState[] => {
+      const tiles: TileState[] = [];
+      const tileW = TILE_AREA_WIDTH / GRID_COLS;
+      const tileH = TILE_AREA_HEIGHT / GRID_ROWS;
+      const coreSet = new Set(stage.coreTileIndices || []);
+      let id = 0;
+      for (let row = 0; row < GRID_ROWS; row++) {
+        for (let col = 0; col < GRID_COLS; col++) {
+          const tileId = id++;
+          tiles.push({
+            id: tileId,
+            row,
+            col,
+            x: TILE_AREA_LEFT + col * tileW,
+            y: TILE_AREA_TOP + row * tileH,
+            width: tileW,
+            height: tileH,
+            maxHp,
+            hp: maxHp,
+            lastHitAt: 0,
+            clearedAt: 0,
+            isCoreZone: coreSet.has(tileId),
+          });
+        }
+      }
+      return tiles;
+    },
+    []
+  );
+
+  const resetBallOnPaddle = useCallback(() => {
+    const paddleCenter = paddleXRef.current + PADDLE_WIDTH / 2;
+    comboRef.current = 0;
+    ballRef.current = {
+      x: paddleCenter,
+      y: PADDLE_Y - BALL_RADIUS - 2,
+      vx: 0,
+      vy: 0,
+      attachedToPaddle: true,
+      attachOffsetX: 0,
+    };
+  }, []);
+
+  const getLaunchAngleFromPaddle = useCallback(() => {
+    const ball = ballRef.current;
+    const offsetRatio = Math.max(-0.85, Math.min(0.85, ball.attachOffsetX / (PADDLE_WIDTH / 2)));
+    if (Math.abs(offsetRatio) > 0.08) {
+      return offsetRatio * ((50 * Math.PI) / 180);
+    }
+    const paddleCenter = paddleXRef.current + PADDLE_WIDTH / 2;
+    const screenRatio = (paddleCenter - CANVAS_WIDTH / 2) / (CANVAS_WIDTH / 2);
+    const rawAngle = screenRatio * 0.42;
+    if (Math.abs(rawAngle) < 0.22) {
+      return rawAngle >= 0 ? 0.24 : -0.24;
+    }
+    return rawAngle;
+  }, []);
+
+  const launchBallFromPaddle = useCallback(() => {
+    if (!ballRef.current.attachedToPaddle) return;
+    const angle = getLaunchAngleFromPaddle();
+    const speed = BASE_BALL_SPEED;
+    ballRef.current.vx = Math.sin(angle) * speed;
+    ballRef.current.vy = -Math.cos(angle) * speed;
+    ballRef.current.attachedToPaddle = false;
+    soundEngine.playLaunch();
+  }, [getLaunchAngleFromPaddle]);
+
+  const initStage = useCallback(
+    (stageIdx: number, asReplayPractice: boolean) => {
+      const targetStage = PUZZLE_STAGES[stageIdx] || PUZZLE_STAGES[0];
+
+      clearAllMovementInputs();
+      prepareOffscreenArtwork(targetStage.id);
+      const initialTiles = createInitialTiles(targetStage, DEFAULT_MAX_HP);
+      tilesRef.current = initialTiles;
+      particlesRef.current = [];
+      floatingFeedbacksRef.current = [];
+      comboRef.current = 0;
+
+      paddleXRef.current = (CANVAS_WIDTH - PADDLE_WIDTH) / 2;
+      resetBallOnPaddle();
+
+      remainingTimeMsRef.current = STAGE_TIME_LIMIT_SEC * 1000;
+      lastDisplayedSecRef.current = STAGE_TIME_LIMIT_SEC;
+      elapsedMsRef.current = 0;
+      lastMetricsSecRef.current = 0;
+      lastDisplayedTenthRef.current = 0;
+      if (elapsedTimerSpanRef.current) {
+        elapsedTimerSpanRef.current.textContent = `0.0s / 目標${targetStage.rivalTargetSec.toFixed(1)}s`;
+      }
+      currentStageIndexRef.current = stageIdx;
+      livesRef.current = MAX_LIVES;
+
+      setCurrentStageIndex(stageIdx);
+      setIsStageReplayPractice(asReplayPractice);
+      setLives(MAX_LIVES);
+      setRemainingSeconds(STAGE_TIME_LIMIT_SEC);
+      setStageMetrics(calculateStageMetrics(initialTiles, 0));
+      setAnswerInput('');
+      setAnswerFeedback({ type: null, message: '' });
+      setCurrentStageRecord(null);
+      setPhase('READY');
+    },
+    [clearAllMovementInputs, createInitialTiles, prepareOffscreenArtwork, resetBallOnPaddle]
+  );
+
+  const transitionToLastChance = useCallback(
+    (reason: 'ALL_TILES_CLEARED' | 'OUT_OF_LIVES' | 'TIME_UP') => {
+      clearAllMovementInputs();
+      ballRef.current.vx = 0;
+      ballRef.current.vy = 0;
+      setStageMetrics(calculateStageMetrics(tilesRef.current, elapsedMsRef.current));
+      setLastChanceReason(reason);
+      setAnswerInput('');
+      setAnswerFeedback({ type: null, message: '' });
+      setPhase('LAST_CHANCE');
+      soundEngine.playAnswerOpen();
+    },
+    [clearAllMovementInputs]
+  );
+
+  const finalizeStageResult = useCallback(
+    (resolutionType: ResolutionType) => {
+      clearAllMovementInputs();
+      const stage = PUZZLE_STAGES[currentStageIndexRef.current] || PUZZLE_STAGES[0];
+      const metrics = calculateStageMetrics(tilesRef.current, elapsedMsRef.current);
+      setStageMetrics(metrics);
+      const isPracticeRun = isPracticeModeRef.current || isStageReplayPracticeRef.current;
+      const isCleared =
+        resolutionType === 'NORMAL_CORRECT' || resolutionType === 'LAST_CHANCE_CORRECT';
+
+      let calculatedScore = 0;
+      if (resolutionType === 'NORMAL_CORRECT') {
+        calculatedScore = metrics.potentialNormalScore;
+      } else if (resolutionType === 'LAST_CHANCE_CORRECT') {
+        calculatedScore = 100;
+      } else {
+        calculatedScore = 0;
+      }
+
+      const record: StageScoreRecord = {
+        stageId: stage.id,
+        stageTitle: stage.title,
+        displayAnswer: stage.displayAnswer,
+        resolutionType,
+        score: calculatedScore,
+        mosaicBonus: resolutionType === 'NORMAL_CORRECT' ? metrics.mosaicBonus : 0,
+        speedBonus: resolutionType === 'NORMAL_CORRECT' ? metrics.speedBonus : 0,
+        elapsedSec: metrics.elapsedSec,
+        rivalTargetSec: stage.rivalTargetSec,
+        speedRank: getSpeedRank(metrics.elapsedSec, isCleared),
+        clearedTiles: metrics.clearedCount,
+        damagedTiles: metrics.damagedCount,
+        remainingHiddenTiles: TOTAL_TILES - metrics.clearedCount,
+        remainingHp: metrics.remainingHp,
+        maxTotalHp: metrics.maxTotalHp,
+        mosaicPercent: metrics.mosaicPercent,
+        exposurePercent: metrics.exposurePercent,
+        isPractice: isPracticeRun,
+      };
+
+      setCurrentStageRecord(record);
+
+      if (!isPracticeRun) {
+        setStageRecords((prev) => {
+          const existing = prev[stage.id];
+          if (existing && existing.score > record.score) {
+            return prev;
+          }
+          return { ...prev, [stage.id]: record };
+        });
+      }
+
+      setPhase('STAGE_RESULT');
+    },
+    [clearAllMovementInputs]
+  );
+
+  const triggerPause = useCallback(
+    (reason: PauseReason) => {
+      const currentPhase = phaseRef.current;
+      // 自動ポーズ（タブ非表示・フォーカス外れ）は実際にボールが動いている PLAYING / COUNTDOWN 時のみ作動させる
+      if (reason !== 'MANUAL') {
+        if (currentPhase !== 'PLAYING' && currentPhase !== 'COUNTDOWN') {
+          return;
+        }
+      } else {
+        if (currentPhase !== 'PLAYING' && currentPhase !== 'READY' && currentPhase !== 'COUNTDOWN') {
+          return;
+        }
+      }
+
+      clearAllMovementInputs();
+      if (currentPhase === 'PLAYING' || currentPhase === 'READY') {
+        setPhaseBeforePause(currentPhase);
+        phaseBeforePauseRef.current = currentPhase;
+      }
+      setPauseReason(reason);
+      setPhase('PAUSED');
+    },
+    [clearAllMovementInputs]
+  );
+
+  const requestResumeFromPause = useCallback(() => {
+    clearAllMovementInputs();
+    if (phaseBeforePauseRef.current === 'READY') {
+      setPhase('READY');
+      return;
+    }
+    setCountdownValue(3);
+    setPhase('COUNTDOWN');
+    soundEngine.playCountdownTick();
+  }, [clearAllMovementInputs]);
+
+  useEffect(() => {
+    if (phase !== 'COUNTDOWN') return;
+
+    if (countdownValue <= 0) {
+      soundEngine.playLaunch();
+      setPhase('PLAYING');
+      return;
+    }
+
+    const timer = window.setTimeout(() => {
+      if (countdownValue > 1) {
+        soundEngine.playCountdownTick();
+      }
+      setCountdownValue((prev) => prev - 1);
+    }, 600);
+
+    return () => window.clearTimeout(timer);
+  }, [phase, countdownValue]);
+
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.hidden) {
+        triggerPause('TAB_HIDDEN');
+      }
+    };
+    const handleWindowBlur = () => {
+      triggerPause('WINDOW_BLUR');
+    };
+    const handleOrientationChange = () => {
+      triggerPause('ORIENTATION');
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    window.addEventListener('blur', handleWindowBlur);
+    window.addEventListener('orientationchange', handleOrientationChange);
+
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('blur', handleWindowBlur);
+      window.removeEventListener('orientationchange', handleOrientationChange);
+    };
+  }, [triggerPause]);
+
+  const handleOpenAnswerModal = useCallback(() => {
+    const cur = phaseRef.current;
+    if (cur !== 'PLAYING' && cur !== 'READY') return;
+    clearAllMovementInputs();
+    setPhaseBeforePause(cur);
+    phaseBeforePauseRef.current = cur;
+    setStageMetrics(calculateStageMetrics(tilesRef.current, elapsedMsRef.current));
+    setAnswerInput('');
+    setAnswerFeedback({ type: null, message: '' });
+    setPhase('ANSWERING');
+    soundEngine.playAnswerOpen();
+  }, [clearAllMovementInputs]);
+
+  const handleReturnFromAnswerModal = useCallback(() => {
+    if (phaseRef.current !== 'ANSWERING') return;
+    clearAllMovementInputs();
+    setAnswerFeedback({ type: null, message: '' });
+    if (phaseBeforePauseRef.current === 'READY') {
+      setPhase('READY');
+    } else {
+      setPhase('PLAYING');
+    }
+  }, [clearAllMovementInputs]);
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // 日本語IME変換中（漢字変換のEnterやEscape）はゲームショートカットを誤発火させない
+      if (e.isComposing || e.keyCode === 229) return;
+
+      if (e.key === 'Escape') {
+        if (phaseRef.current === 'ANSWERING') {
+          e.preventDefault();
+          handleReturnFromAnswerModal();
+          return;
+        }
+      }
+
+      const activeTag = document.activeElement?.tagName.toLowerCase();
+      if (activeTag === 'input' || activeTag === 'textarea') return;
+
+      if (phaseRef.current !== 'PLAYING' && phaseRef.current !== 'READY') return;
+
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        handleOpenAnswerModal();
+        return;
+      }
+
+      if (e.key === 'ArrowLeft' || e.key === 'a' || e.key === 'A') {
+        keysPressedRef.current.left = true;
+      } else if (e.key === 'ArrowRight' || e.key === 'd' || e.key === 'D') {
+        keysPressedRef.current.right = true;
+      } else if (e.key === ' ' && ballRef.current.attachedToPaddle) {
+        e.preventDefault();
+        launchBallFromPaddle();
+        setPhase('PLAYING');
+      }
+    };
+
+    const handleKeyUp = (e: KeyboardEvent) => {
+      if (e.key === 'ArrowLeft' || e.key === 'a' || e.key === 'A') {
+        keysPressedRef.current.left = false;
+      } else if (e.key === 'ArrowRight' || e.key === 'd' || e.key === 'D') {
+        keysPressedRef.current.right = false;
+      }
+    };
+
+    const handleGlobalPointerCancel = () => {
+      clearAllMovementInputs();
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    window.addEventListener('keyup', handleKeyUp);
+    window.addEventListener('pointercancel', handleGlobalPointerCancel);
+    window.addEventListener('mouseup', handleGlobalPointerCancel);
+
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('keyup', handleKeyUp);
+      window.removeEventListener('pointercancel', handleGlobalPointerCancel);
+      window.removeEventListener('mouseup', handleGlobalPointerCancel);
+    };
+  }, [clearAllMovementInputs, handleOpenAnswerModal, handleReturnFromAnswerModal, launchBallFromPaddle]);
+
+  useEffect(() => {
+    if (phase === 'ANSWERING' || phase === 'LAST_CHANCE') {
+      const id = window.setTimeout(() => {
+        answerInputElementRef.current?.focus();
+      }, 45);
+      return () => window.clearTimeout(id);
+    }
+  }, [phase]);
+
+  /**
+   * プレイフィールド描画:
+   * - 3回ヒット制（100% -> 70% -> 40% -> 0%）
+   * - 0%になった四角形には「新しくクリア済みの枠（スカイブルーのウィンドウ枠＋四隅ブラケット）」を描画し、
+   *   心理的・視覚的に「ここはもう0%でクリアしていてボールが貫通する」と一目で分かるようにする。
+   */
+  const renderPlayfield = useCallback(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    ctx.save();
+    ctx.clearRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+
+    // 1. アリーナ全体のダークスタジオ背景
+    const arenaGrad = ctx.createLinearGradient(0, 0, 0, CANVAS_HEIGHT);
+    arenaGrad.addColorStop(0, '#090d16');
+    arenaGrad.addColorStop(0.55, '#0f172a');
+    arenaGrad.addColorStop(1, '#090d16');
+    ctx.fillStyle = arenaGrad;
+    ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+
+    // 2. 写真領域の下地（0%原画）描画
+    if (offscreenArtworkRef.current) {
+      ctx.imageSmoothingEnabled = true;
+      ctx.drawImage(
+        offscreenArtworkRef.current,
+        0,
+        0,
+        TILE_AREA_WIDTH,
+        TILE_AREA_HEIGHT,
+        TILE_AREA_LEFT,
+        TILE_AREA_TOP,
+        TILE_AREA_WIDTH,
+        TILE_AREA_HEIGHT
+      );
+    }
+
+    const isFullRevealPhase = phaseRef.current === 'STAGE_RESULT';
+
+    // 3. 各ゾーンのモザイク（100% / 70% / 40%）と、0%クリア済み枠の描画
+    if (!isFullRevealPhase) {
+      const now = performance.now();
+
+      for (const tile of tilesRef.current) {
+        if (tile.hp <= 0) continue;
+
+        let mosaicLayer: HTMLCanvasElement | null = null;
+        if (tile.hp >= 3) {
+          mosaicLayer = offscreenMosaic100Ref.current;
+        } else if (tile.hp === 2) {
+          mosaicLayer = offscreenMosaic70Ref.current;
+        } else {
+          mosaicLayer = offscreenMosaic40Ref.current;
+        }
+
+        const sx = tile.x - TILE_AREA_LEFT;
+        const sy = tile.y - TILE_AREA_TOP;
+
+        if (mosaicLayer) {
+          ctx.imageSmoothingEnabled = false;
+          ctx.drawImage(
+            mosaicLayer,
+            sx,
+            sy,
+            tile.width,
+            tile.height,
+            tile.x,
+            tile.y,
+            tile.width,
+            tile.height
+          );
+        }
+
+        // ★コアゾーン（0%にすると周囲4マスも1段階削るボーナス枠）の控えめなターゲット印
+        if (tile.isCoreZone) {
+          ctx.strokeStyle = 'rgba(251, 191, 36, 0.55)';
+          ctx.lineWidth = 1.2;
+          ctx.strokeRect(tile.x + 2, tile.y + 2, tile.width - 4, tile.height - 4);
+          ctx.fillStyle = 'rgba(15, 23, 42, 0.65)';
+          traceRoundedRect(ctx, tile.x + 5, tile.y + 5, 20, 14, 4);
+          ctx.fill();
+          ctx.fillStyle = '#fbbf24';
+          ctx.font = 'bold 10px sans-serif';
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+          ctx.fillText('★', tile.x + 15, tile.y + 12.5);
+        }
+
+        // ヒット直後（150ms以内）のホワイトフラッシュ
+        const elapsedSinceHit = now - tile.lastHitAt;
+        if (tile.lastHitAt > 0 && elapsedSinceHit < 150) {
+          const flashAlpha = (1 - elapsedSinceHit / 150) * 0.34;
+          ctx.fillStyle = `rgba(255, 255, 255, ${flashAlpha})`;
+          ctx.fillRect(tile.x, tile.y, tile.width, tile.height);
+        }
+      }
+
+      // 0%（hp === 0）になった四角形を「クリア済みウィンドウ枠」としてくっきり囲む
+      for (const tile of tilesRef.current) {
+        if (tile.hp > 0) continue;
+
+        const rx = tile.x;
+        const ry = tile.y;
+        const rw = tile.width;
+        const rh = tile.height;
+
+        const elapsedSinceClear = now - tile.clearedAt;
+        if (tile.clearedAt > 0 && elapsedSinceClear < 350) {
+          const clearGlowAlpha = (1 - elapsedSinceClear / 350) * 0.45;
+          ctx.fillStyle = `rgba(56, 189, 248, ${clearGlowAlpha})`;
+          ctx.fillRect(rx, ry, rw, rh);
+        }
+
+        ctx.strokeStyle = 'rgba(56, 189, 248, 0.72)';
+        ctx.lineWidth = 1.6;
+        ctx.strokeRect(rx + 1.5, ry + 1.5, rw - 3, rh - 3);
+
+        const cLen = 8;
+        const pad = 2.5;
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.92)';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        // 左上
+        ctx.moveTo(rx + pad, ry + pad + cLen);
+        ctx.lineTo(rx + pad, ry + pad);
+        ctx.lineTo(rx + pad + cLen, ry + pad);
+        // 右上
+        ctx.moveTo(rx + rw - pad - cLen, ry + pad);
+        ctx.lineTo(rx + rw - pad, ry + pad);
+        ctx.lineTo(rx + rw - pad, ry + pad + cLen);
+        // 左下
+        ctx.moveTo(rx + pad, ry + rh - pad - cLen);
+        ctx.lineTo(rx + pad, ry + rh - pad);
+        ctx.lineTo(rx + pad + cLen, ry + rh - pad);
+        // 右下
+        ctx.moveTo(rx + rw - pad - cLen, ry + rh - pad);
+        ctx.lineTo(rx + rw - pad, ry + rh - pad);
+        ctx.lineTo(rx + rw - pad, ry + rh - pad - cLen);
+        ctx.stroke();
+      }
+    }
+
+    // 写真領域の下端境界ライン
+    ctx.strokeStyle = 'rgba(148, 163, 184, 0.25)';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(0, TILE_AREA_TOP + TILE_AREA_HEIGHT + 0.5);
+    ctx.lineTo(CANVAS_WIDTH, TILE_AREA_TOP + TILE_AREA_HEIGHT + 0.5);
+    ctx.stroke();
+
+    // 4. モザイク破片パーティクル
+    if (particlesRef.current.length > 0) {
+      for (const p of particlesRef.current) {
+        ctx.fillStyle = p.color;
+        ctx.globalAlpha = Math.max(0, p.alpha);
+        if (p.isSquare) {
+          ctx.fillRect(p.x - p.size, p.y - p.size, p.size * 2, p.size * 2);
+        } else {
+          ctx.beginPath();
+          ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+          ctx.fill();
+        }
+      }
+      ctx.globalAlpha = 1;
+    }
+
+    // 5. フローティングポップアップ（"0% CLEAR!", "★ CHAIN!" 等）
+    if (floatingFeedbacksRef.current.length > 0) {
+      ctx.save();
+      ctx.font = 'bold 13px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      for (const fb of floatingFeedbacksRef.current) {
+        ctx.globalAlpha = Math.max(0, Math.min(1, fb.alpha));
+        ctx.strokeStyle = 'rgba(9, 13, 22, 0.9)';
+        ctx.lineWidth = 3.5;
+        ctx.strokeText(fb.text, fb.x, fb.y);
+        ctx.fillStyle = fb.color;
+        ctx.fillText(fb.text, fb.x, fb.y);
+      }
+      ctx.restore();
+    }
+
+    // 6. 下部の広いプレイフィールド上のパドル・発射ガイド・ボール
+    if (!isFullRevealPhase) {
+      ctx.strokeStyle = 'rgba(148, 163, 184, 0.12)';
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(24, PADDLE_Y + PADDLE_HEIGHT / 2);
+      ctx.lineTo(CANVAS_WIDTH - 24, PADDLE_Y + PADDLE_HEIGHT / 2);
+      ctx.stroke();
+
+      const px = paddleXRef.current;
+      const py = PADDLE_Y;
+      const pGrad = ctx.createLinearGradient(px, py, px, py + PADDLE_HEIGHT);
+      if (catchAndAimModeRef.current) {
+        pGrad.addColorStop(0, '#34d399');
+        pGrad.addColorStop(1, '#059669');
+      } else {
+        pGrad.addColorStop(0, '#38bdf8');
+        pGrad.addColorStop(1, '#0284c7');
+      }
+      ctx.fillStyle = pGrad;
+      traceRoundedRect(ctx, px, py, PADDLE_WIDTH, PADDLE_HEIGHT, 7);
+      ctx.fill();
+
+      ctx.strokeStyle = catchAndAimModeRef.current ? '#a7f3d0' : '#bae6fd';
+      ctx.lineWidth = 1.2;
+      traceRoundedRect(ctx, px, py, PADDLE_WIDTH, PADDLE_HEIGHT, 7);
+      ctx.stroke();
+
+      const ball = ballRef.current;
+
+      if (ball.attachedToPaddle) {
+        const launchAngle = getLaunchAngleFromPaddle();
+        const guideLen = 145;
+        const targetX = ball.x + Math.sin(launchAngle) * guideLen;
+        const targetY = ball.y - Math.cos(launchAngle) * guideLen;
+
+        ctx.save();
+        ctx.strokeStyle = 'rgba(56, 189, 248, 0.78)';
+        ctx.lineWidth = 2;
+        ctx.setLineDash([5, 5]);
+        ctx.beginPath();
+        ctx.moveTo(ball.x, ball.y - BALL_RADIUS - 3);
+        ctx.lineTo(targetX, targetY);
+        ctx.stroke();
+
+        ctx.setLineDash([]);
+        ctx.fillStyle = '#38bdf8';
+        ctx.beginPath();
+        ctx.arc(targetX, targetY, 3.5, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+      }
+
+      // ボール描画
+      ctx.save();
+      ctx.shadowColor = 'rgba(15, 23, 42, 0.9)';
+      ctx.shadowBlur = 6;
+      const bGrad = ctx.createRadialGradient(
+        ball.x - 2.5,
+        ball.y - 2.5,
+        1.5,
+        ball.x,
+        ball.y,
+        BALL_RADIUS
+      );
+      bGrad.addColorStop(0, '#ffffff');
+      bGrad.addColorStop(0.6, '#f8fafc');
+      bGrad.addColorStop(1, '#38bdf8');
+      ctx.fillStyle = bGrad;
+      ctx.beginPath();
+      ctx.arc(ball.x, ball.y, BALL_RADIUS, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.strokeStyle = '#0f172a';
+      ctx.lineWidth = 1.8;
+      ctx.stroke();
+      ctx.restore();
+    }
+
+    ctx.restore();
+  }, [getLaunchAngleFromPaddle]);
+
+  // --- メイン物理＆タイマーループ ---
+  useEffect(() => {
+    let animationFrameId: number;
+    let lastTimestamp = performance.now();
+
+    const step = (now: number) => {
+      const rawDt = (now - lastTimestamp) / 1000;
+      lastTimestamp = now;
+      const dt = Math.min(rawDt, 0.033);
+
+      const currentPhase = phaseRef.current;
+
+      if (currentPhase === 'PLAYING' || currentPhase === 'READY') {
+        const moveLeft = keysPressedRef.current.left || buttonHoldRef.current.left;
+        const moveRight = keysPressedRef.current.right || buttonHoldRef.current.right;
+        const paddleSpeed = 520;
+        if (moveLeft && !moveRight) {
+          paddleXRef.current = Math.max(12, paddleXRef.current - paddleSpeed * dt);
+        } else if (moveRight && !moveLeft) {
+          paddleXRef.current = Math.min(
+            CANVAS_WIDTH - PADDLE_WIDTH - 12,
+            paddleXRef.current + paddleSpeed * dt
+          );
+        }
+
+        if (ballRef.current.attachedToPaddle) {
+          const clampedOffset = Math.max(
+            -PADDLE_WIDTH * 0.42,
+            Math.min(PADDLE_WIDTH * 0.42, ballRef.current.attachOffsetX)
+          );
+          ballRef.current.x = paddleXRef.current + PADDLE_WIDTH / 2 + clampedOffset;
+          ballRef.current.y = PADDLE_Y - BALL_RADIUS - 2;
+        }
+      }
+
+      if (currentPhase === 'PLAYING') {
+        // 経過タイム計測：0.1秒表示はDOM Refで直接更新し、React stateは1秒ごとまたはタイルヒット時に更新して60fpsを維持
+        elapsedMsRef.current += dt * 1000;
+        const currentTenth = Math.floor(elapsedMsRef.current / 100);
+        if (currentTenth !== lastDisplayedTenthRef.current) {
+          lastDisplayedTenthRef.current = currentTenth;
+          if (elapsedTimerSpanRef.current) {
+            const activeStage = PUZZLE_STAGES[currentStageIndexRef.current] || PUZZLE_STAGES[0];
+            const secStr = (currentTenth / 10).toFixed(1);
+            elapsedTimerSpanRef.current.textContent = `${secStr}s / 目標${activeStage.rivalTargetSec.toFixed(1)}s`;
+          }
+        }
+
+        const currentWholeSec = Math.floor(elapsedMsRef.current / 1000);
+        if (currentWholeSec !== lastMetricsSecRef.current) {
+          lastMetricsSecRef.current = currentWholeSec;
+          setStageMetrics(calculateStageMetrics(tilesRef.current, elapsedMsRef.current));
+        }
+
+        if (!isPracticeModeRef.current) {
+          const nextTime = Math.max(0, remainingTimeMsRef.current - dt * 1000);
+          remainingTimeMsRef.current = nextTime;
+          const nextSec = Math.ceil(nextTime / 1000);
+          if (nextSec !== lastDisplayedSecRef.current) {
+            lastDisplayedSecRef.current = nextSec;
+            setRemainingSeconds(nextSec);
+          }
+
+          if (nextTime <= 0) {
+            transitionToLastChance('TIME_UP');
+            renderPlayfield();
+            animationFrameId = requestAnimationFrame(step);
+            return;
+          }
+        }
+
+        const ball = ballRef.current;
+        if (!ball.attachedToPaddle) {
+          const subSteps = 3;
+          const subDt = dt / subSteps;
+
+          const normalizeAndEnforceMinVy = (applyMicroJitter: boolean = true) => {
+            const signX = ball.vx >= 0 ? 1 : -1;
+            const signY = ball.vy >= 0 ? 1 : -1;
+
+            // 衝突時に微細なランダム角度オフセット（約±2.5度）を加えて水平・垂直の無限往復ループを防止
+            if (applyMicroJitter) {
+              const jitterRad = (Math.random() - 0.5) * 0.09;
+              const cosJ = Math.cos(jitterRad);
+              const sinJ = Math.sin(jitterRad);
+              const rx = ball.vx * cosJ - ball.vy * sinJ;
+              const ry = ball.vx * sinJ + ball.vy * cosJ;
+              ball.vx = Math.sign(rx) === signX ? rx : signX * Math.abs(rx);
+              ball.vy = Math.sign(ry) === signY ? ry : signY * Math.abs(ry);
+            }
+
+            const minVy = 165;
+            const minVx = 42;
+            if (Math.abs(ball.vy) < minVy) {
+              ball.vy = signY * minVy;
+            }
+            if (Math.abs(ball.vx) < minVx) {
+              ball.vx = signX * (minVx + Math.random() * 18);
+            }
+
+            const currentMag = Math.hypot(ball.vx, ball.vy);
+            if (currentMag > 0.001) {
+              const scale = BASE_BALL_SPEED / currentMag;
+              ball.vx *= scale;
+              ball.vy *= scale;
+            }
+          };
+
+          const hasAliveTileAt = (col: number, row: number): boolean => {
+            if (col < 0 || col >= GRID_COLS || row < 0 || row >= GRID_ROWS) return false;
+            const idx = row * GRID_COLS + col;
+            const neighbor = tilesRef.current[idx];
+            return Boolean(neighbor && neighbor.hp > 0);
+          };
+
+          for (let s = 0; s < subSteps; s++) {
+            ball.x += ball.vx * subDt;
+            ball.y += ball.vy * subDt;
+
+            // 左右壁反射
+            if (ball.x - BALL_RADIUS < 4) {
+              ball.x = 4 + BALL_RADIUS;
+              ball.vx = Math.abs(ball.vx);
+              normalizeAndEnforceMinVy(true);
+              soundEngine.playBounce(false);
+            } else if (ball.x + BALL_RADIUS > CANVAS_WIDTH - 4) {
+              ball.x = CANVAS_WIDTH - 4 - BALL_RADIUS;
+              ball.vx = -Math.abs(ball.vx);
+              normalizeAndEnforceMinVy(true);
+              soundEngine.playBounce(false);
+            }
+
+            // 天井反射
+            if (ball.y - BALL_RADIUS < 4) {
+              ball.y = 4 + BALL_RADIUS;
+              ball.vy = Math.abs(ball.vy);
+              normalizeAndEnforceMinVy(true);
+              soundEngine.playBounce(false);
+            }
+
+            // パドル衝突判定
+            if (
+              ball.vy > 0 &&
+              ball.y + BALL_RADIUS >= PADDLE_Y &&
+              ball.y - BALL_RADIUS <= PADDLE_Y + PADDLE_HEIGHT &&
+              ball.x + BALL_RADIUS >= paddleXRef.current &&
+              ball.x - BALL_RADIUS <= paddleXRef.current + PADDLE_WIDTH
+            ) {
+              const paddleCenter = paddleXRef.current + PADDLE_WIDTH / 2;
+              const rawOffset = ball.x - paddleCenter;
+              const hitOffset = Math.max(-1, Math.min(1, rawOffset / (PADDLE_WIDTH / 2)));
+              comboRef.current = 0;
+
+              if (catchAndAimModeRef.current) {
+                ball.attachedToPaddle = true;
+                ball.attachOffsetX = Math.max(
+                  -PADDLE_WIDTH * 0.4,
+                  Math.min(PADDLE_WIDTH * 0.4, rawOffset)
+                );
+                ball.vx = 0;
+                ball.vy = 0;
+                ball.y = PADDLE_Y - BALL_RADIUS - 2;
+                soundEngine.playBounce(true);
+                break;
+              } else {
+                const maxBounceAngle = (60 * Math.PI) / 180;
+                const paddleJitter = (Math.random() - 0.5) * 0.08;
+                const bounceAngle = Math.max(
+                  -maxBounceAngle,
+                  Math.min(maxBounceAngle, hitOffset * maxBounceAngle + paddleJitter)
+                );
+
+                ball.vx = Math.sin(bounceAngle) * BASE_BALL_SPEED;
+                ball.vy = -Math.cos(bounceAngle) * BASE_BALL_SPEED;
+                normalizeAndEnforceMinVy(false);
+                ball.y = PADDLE_Y - BALL_RADIUS - 1;
+                soundEngine.playBounce(true);
+              }
+            }
+
+            // モザイクゾーンとの衝突判定
+            let hitTile: TileState | null = null;
+            let bestDistSq = Infinity;
+            let hitClosestX = 0;
+            let hitClosestY = 0;
+
+            for (const tile of tilesRef.current) {
+              if (tile.hp <= 0) continue;
+
+              const closestX = Math.max(tile.x, Math.min(ball.x, tile.x + tile.width));
+              const closestY = Math.max(tile.y, Math.min(ball.y, tile.y + tile.height));
+              const distX = ball.x - closestX;
+              const distY = ball.y - closestY;
+              const distSq = distX * distX + distY * distY;
+
+              if (distSq <= BALL_RADIUS * BALL_RADIUS && distSq < bestDistSq) {
+                bestDistSq = distSq;
+                hitTile = tile;
+                hitClosestX = closestX;
+                hitClosestY = closestY;
+              }
+            }
+
+            if (hitTile) {
+              hitTile.hp = Math.max(0, hitTile.hp - 1);
+              hitTile.lastHitAt = now;
+              comboRef.current += 1;
+
+              const tileCenterX = hitTile.x + hitTile.width / 2;
+              const tileCenterY = hitTile.y + hitTile.height / 2;
+
+              if (hitTile.hp === 0) {
+                hitTile.clearedAt = now;
+
+                // ★コアゾーンを0%にした場合、隣接4マスのモザイクも1段階連鎖で削る！
+                if (hitTile.isCoreZone) {
+                  const neighbors = [
+                    { c: hitTile.col - 1, r: hitTile.row },
+                    { c: hitTile.col + 1, r: hitTile.row },
+                    { c: hitTile.col, r: hitTile.row - 1 },
+                    { c: hitTile.col, r: hitTile.row + 1 },
+                  ];
+                  for (const nb of neighbors) {
+                    if (nb.c >= 0 && nb.c < GRID_COLS && nb.r >= 0 && nb.r < GRID_ROWS) {
+                      const nbTile = tilesRef.current[nb.r * GRID_COLS + nb.c];
+                      if (nbTile && nbTile.hp > 0) {
+                        nbTile.hp = Math.max(0, nbTile.hp - 1);
+                        nbTile.lastHitAt = now;
+                        if (nbTile.hp === 0) {
+                          nbTile.clearedAt = now;
+                        }
+                      }
+                    }
+                  }
+                  floatingFeedbacksRef.current.push({
+                    x: tileCenterX,
+                    y: tileCenterY,
+                    vy: -42,
+                    text: '★ CHAIN CLEAR!',
+                    color: '#fbbf24',
+                    alpha: 1,
+                  });
+                } else {
+                  floatingFeedbacksRef.current.push({
+                    x: tileCenterX,
+                    y: tileCenterY,
+                    vy: -36,
+                    text: '0% CLEAR!',
+                    color: '#38bdf8',
+                    alpha: 1,
+                  });
+                }
+              } else {
+                const nextPct = hitTile.hp === 2 ? '70%' : '40%';
+                floatingFeedbacksRef.current.push({
+                  x: tileCenterX,
+                  y: tileCenterY,
+                  vy: -28,
+                  text: nextPct,
+                  color: '#e2e8f0',
+                  alpha: 0.9,
+                });
+              }
+
+              const overlapX = hitTile.width / 2 + BALL_RADIUS - Math.abs(ball.x - tileCenterX);
+              const overlapY = hitTile.height / 2 + BALL_RADIUS - Math.abs(ball.y - tileCenterY);
+
+              const dirX = ball.x < tileCenterX ? -1 : 1;
+              const dirY = ball.y < tileCenterY ? -1 : 1;
+              const blockedHorizontally = hasAliveTileAt(hitTile.col + dirX, hitTile.row);
+              const blockedVertically = hasAliveTileAt(hitTile.col, hitTile.row + dirY);
+
+              const resolveHorizontally =
+                (overlapX < overlapY && !blockedHorizontally) || blockedVertically;
+
+              if (resolveHorizontally) {
+                if (dirX < 0) {
+                  ball.x = hitTile.x - BALL_RADIUS - 0.5;
+                  ball.vx = -Math.abs(ball.vx);
+                } else {
+                  ball.x = hitTile.x + hitTile.width + BALL_RADIUS + 0.5;
+                  ball.vx = Math.abs(ball.vx);
+                }
+              } else {
+                if (dirY < 0) {
+                  ball.y = hitTile.y - BALL_RADIUS - 0.5;
+                  ball.vy = -Math.abs(ball.vy);
+                } else {
+                  ball.y = hitTile.y + hitTile.height + BALL_RADIUS + 0.5;
+                  ball.vy = Math.abs(ball.vy);
+                }
+              }
+              normalizeAndEnforceMinVy(true);
+
+              // モザイク破片エフェクト
+              const pCount = hitTile.hp === 0 ? 12 : 6;
+              for (let i = 0; i < pCount; i++) {
+                const angle = (Math.PI * 2 * i) / pCount + Math.random() * 0.5;
+                const speed = (hitTile.hp === 0 ? 85 : 50) + Math.random() * 55;
+                particlesRef.current.push({
+                  x: hitClosestX,
+                  y: hitClosestY,
+                  vx: Math.cos(angle) * speed,
+                  vy: Math.sin(angle) * speed,
+                  color:
+                    hitTile.hp === 0
+                      ? hitTile.isCoreZone
+                        ? '#fbbf24'
+                        : '#38bdf8'
+                      : '#e2e8f0',
+                  alpha: 0.9,
+                  size: (hitTile.hp === 0 ? 4 : 2.8) + Math.random() * 1.5,
+                  isSquare: true,
+                });
+              }
+
+              const nextMetrics = calculateStageMetrics(tilesRef.current, elapsedMsRef.current);
+              setStageMetrics(nextMetrics);
+
+              if (hitTile.hp === 0) {
+                soundEngine.playTileBreak(nextMetrics.clearedCount, true);
+              } else {
+                soundEngine.playTileBreak(
+                  nextMetrics.clearedCount + nextMetrics.damagedCount,
+                  false
+                );
+              }
+
+              if (nextMetrics.clearedCount >= TOTAL_TILES) {
+                transitionToLastChance('ALL_TILES_CLEARED');
+              }
+            }
+
+            if (phaseRef.current !== 'PLAYING') break;
+
+            // 落球判定
+            if (ball.y - BALL_RADIUS > CANVAS_HEIGHT + 6) {
+              const nextLives = livesRef.current - 1;
+              livesRef.current = nextLives;
+              setLives(nextLives);
+              soundEngine.playMiss();
+
+              if (nextLives <= 0) {
+                transitionToLastChance('OUT_OF_LIVES');
+              } else {
+                resetBallOnPaddle();
+                setPhase('READY');
+              }
+              break;
+            }
+          }
+        }
+      }
+
+      if (particlesRef.current.length > 0) {
+        for (let i = particlesRef.current.length - 1; i >= 0; i--) {
+          const p = particlesRef.current[i];
+          p.x += p.vx * dt;
+          p.y += p.vy * dt;
+          p.alpha -= dt * 2.6;
+          if (p.alpha <= 0) {
+            particlesRef.current.splice(i, 1);
+          }
+        }
+      }
+
+      if (floatingFeedbacksRef.current.length > 0) {
+        for (let i = floatingFeedbacksRef.current.length - 1; i >= 0; i--) {
+          const fb = floatingFeedbacksRef.current[i];
+          fb.y += fb.vy * dt;
+          fb.alpha -= dt * 1.45;
+          if (fb.alpha <= 0) {
+            floatingFeedbacksRef.current.splice(i, 1);
+          }
+        }
+      }
+
+      renderPlayfield();
+      animationFrameId = requestAnimationFrame(step);
+    };
+
+    animationFrameId = requestAnimationFrame(step);
+    return () => cancelAnimationFrame(animationFrameId);
+  }, [renderPlayfield, resetBallOnPaddle, transitionToLastChance]);
+
+  const updatePaddleFromClientX = useCallback((clientX: number, rect: DOMRect) => {
+    const ratio = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
+    const targetCenterX = ratio * CANVAS_WIDTH;
+    const clampedX = Math.max(
+      12,
+      Math.min(CANVAS_WIDTH - PADDLE_WIDTH - 12, targetCenterX - PADDLE_WIDTH / 2)
+    );
+    paddleXRef.current = clampedX;
+    if (ballRef.current.attachedToPaddle) {
+      const clampedOffset = Math.max(
+        -PADDLE_WIDTH * 0.42,
+        Math.min(PADDLE_WIDTH * 0.42, ballRef.current.attachOffsetX)
+      );
+      ballRef.current.x = clampedX + PADDLE_WIDTH / 2 + clampedOffset;
+    }
+  }, []);
+
+  const evaluateSubmittedText = (rawText: string) => {
+    if (isSubmittingAnswerRef.current) return;
+
+    const judgment = judgeStageAnswer(currentStage, rawText);
+
+    if (judgment.isEmpty) {
+      setAnswerFeedback({
+        type: 'EMPTY',
+        message: '回答を入力してください（ひらがな・カタカナ・漢字・英語すべて対応）。',
+      });
+      return;
+    }
+
+    isSubmittingAnswerRef.current = true;
+    window.setTimeout(() => {
+      isSubmittingAnswerRef.current = false;
+    }, 250);
+
+    if (phase === 'ANSWERING') {
+      if (judgment.isCorrect) {
+        soundEngine.playCorrect();
+        finalizeStageResult('NORMAL_CORRECT');
+      } else {
+        const nextLives = livesRef.current - 1;
+        livesRef.current = nextLives;
+        setLives(nextLives);
+        soundEngine.playMiss();
+
+        if (nextLives <= 0) {
+          transitionToLastChance('OUT_OF_LIVES');
+        } else {
+          setAnswerFeedback({
+            type: 'WRONG',
+            message: `「${rawText}」は不正解です。ライフが1減少しました（残り ${nextLives}）。`,
+          });
+          setAnswerInput('');
+        }
+      }
+    } else if (phase === 'LAST_CHANCE') {
+      if (judgment.isCorrect) {
+        soundEngine.playCorrect();
+        finalizeStageResult('LAST_CHANCE_CORRECT');
+      } else {
+        soundEngine.playMiss();
+        finalizeStageResult(
+          lastChanceReason === 'ALL_TILES_CLEARED'
+            ? 'ALL_REVEALED_UNSOLVED'
+            : 'GAVE_UP_OR_FAILED'
+        );
+      }
+    }
+  };
+
+  const handleSubmitAnswer = (e: React.FormEvent) => {
+    e.preventDefault();
+    evaluateSubmittedText(answerInput);
+  };
+
+  const handleGiveUpAndReveal = () => {
+    soundEngine.playMiss();
+    const isAllCleared = tilesRef.current.every((t) => t.hp === 0);
+    finalizeStageResult(isAllCleared ? 'ALL_REVEALED_UNSOLVED' : 'GAVE_UP_OR_FAILED');
+  };
+
+  const toggleMute = () => {
+    const next = !isMuted;
+    setIsMuted(next);
+    soundEngine.setMuted(next);
+  };
+
+  const officialTotalScore = PUZZLE_STAGES.reduce((acc, st) => {
+    const rec = stageRecords[st.id];
+    return acc + (rec && !rec.isPractice ? rec.score : 0);
+  }, 0);
+
+  const formatRemainingSeconds = (totalSec: number) => {
+    const mins = Math.floor(totalSec / 60);
+    const secs = totalSec % 60;
+    return `${mins}:${secs.toString().padStart(2, '0')}`;
+  };
+
+  const isGameActive = phase !== 'TITLE' && phase !== 'SUMMARY';
+  const isDockExpanded =
+    phase === 'ANSWERING' || phase === 'LAST_CHANCE' || phase === 'STAGE_RESULT';
+  const hasCluesRevealed = stageMetrics.clearedCount > 0 || stageMetrics.mosaicPercent <= 88;
+
+  return (
+    <div className="h-dvh w-full bg-slate-950 text-slate-100 flex flex-col items-center justify-between select-none overflow-hidden">
+      {/* ネイティブアプリ風トップステータスバー（1行完結） */}
+      <header className="w-full max-w-xl h-12 px-3 flex items-center justify-between border-b border-white/10 bg-slate-900/80 backdrop-blur-md shrink-0">
+        <div className="flex items-center gap-2 min-w-0">
+          {isGameActive ? (
+            <button
+              type="button"
+              onClick={() => setPhase('TITLE')}
+              className="min-h-8 min-w-8 px-2 rounded-lg bg-slate-800/80 hover:bg-slate-700 text-slate-300 border border-white/10 flex items-center justify-center transition cursor-pointer"
+              title="ホームへ戻る"
+              aria-label="ホームへ戻る"
+            >
+              <Home className="w-3.5 h-3.5" />
+            </button>
+          ) : (
+            <span className="w-2 h-2 rounded-full bg-sky-400 shrink-0" />
+          )}
+
+          {isGameActive ? (
+            <div className="flex items-center gap-2 text-xs font-medium text-slate-300 truncate">
+              <span className="font-mono font-bold text-white whitespace-nowrap">
+                {currentStage.title} / 3
+              </span>
+              <span aria-hidden="true" className="text-slate-600">
+                ·
+              </span>
+              <span className="font-mono tabular-nums text-sky-300 whitespace-nowrap">
+                モザイク {stageMetrics.mosaicPercent}%
+              </span>
+              <span aria-hidden="true" className="text-slate-600 hidden sm:inline">
+                ·
+              </span>
+              <span
+                className="font-mono tabular-nums text-emerald-300 whitespace-nowrap hidden sm:inline-flex items-center gap-1"
+                title={`ライバル目標タイム: ${currentStage.rivalTargetSec.toFixed(1)}s`}
+              >
+                <Timer className="w-3 h-3" />
+                <span ref={elapsedTimerSpanRef}>
+                  {stageMetrics.elapsedSec.toFixed(1)}s / 目標{currentStage.rivalTargetSec.toFixed(1)}s
+                </span>
+              </span>
+            </div>
+          ) : (
+            <span className="text-sm font-bold tracking-tight text-white truncate">
+              モザイクブレイク
+            </span>
+          )}
+        </div>
+
+        {/* 右側メトリクス＆ユーティリティ */}
+        <div className="flex items-center gap-2 shrink-0">
+          {isGameActive && (
+            <>
+              <div className="flex items-center gap-0.5" aria-label={`ライフ ${lives}`}>
+                {Array.from({ length: MAX_LIVES }).map((_, idx) => (
+                  <Heart
+                    key={idx}
+                    className={`w-3.5 h-3.5 transition ${
+                      idx < lives
+                        ? 'text-rose-500 fill-rose-500'
+                        : 'text-slate-700 fill-slate-800'
+                    }`}
+                  />
+                ))}
+              </div>
+
+              <span aria-hidden="true" className="text-slate-700">
+                ·
+              </span>
+
+              <div className="flex items-center gap-1 text-xs font-mono tabular-nums text-slate-200">
+                <Clock className="w-3.5 h-3.5 text-sky-400" />
+                <span>{isPracticeMode ? 'FREE' : formatRemainingSeconds(remainingSeconds)}</span>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setCatchAndAimMode((prev) => !prev)}
+                className={`min-h-8 px-2 rounded-lg text-[11px] font-medium border transition flex items-center gap-1 cursor-pointer whitespace-nowrap ${
+                  catchAndAimMode
+                    ? 'bg-emerald-950/90 border-emerald-500/50 text-emerald-300'
+                    : 'bg-slate-800/80 border-white/10 text-slate-400 hover:text-slate-200'
+                }`}
+                title="パドルでボールをキャッチして狙い撃ちするモード"
+              >
+                <Crosshair className="w-3 h-3" />
+                <span className="hidden sm:inline">ホールド</span>
+              </button>
+            </>
+          )}
+
+          <button
+            type="button"
+            onClick={toggleMute}
+            className="min-h-8 min-w-8 px-2 rounded-lg bg-slate-800/80 border border-white/10 text-slate-200 hover:bg-slate-700 transition flex items-center justify-center cursor-pointer"
+            aria-label={isMuted ? '音声をオンにする' : '音声をミュートする'}
+            title={isMuted ? 'ミュート解除' : 'ミュート'}
+          >
+            {isMuted ? (
+              <VolumeX className="w-3.5 h-3.5 text-rose-400" />
+            ) : (
+              <Volume2 className="w-3.5 h-3.5 text-sky-400" />
+            )}
+          </button>
+
+          {isGameActive && (
+            <button
+              type="button"
+              disabled={phase !== 'PLAYING' && phase !== 'READY'}
+              onClick={() => triggerPause('MANUAL')}
+              className="min-h-8 min-w-8 px-2 rounded-lg bg-slate-800/80 border border-white/10 text-slate-200 hover:bg-slate-700 disabled:opacity-40 transition flex items-center justify-center cursor-pointer"
+              aria-label="一時停止"
+              title="一時停止"
+            >
+              <Pause className="w-3.5 h-3.5" />
+            </button>
+          )}
+        </div>
+      </header>
+
+      {/* メインアプリビューポート（スクロールなし・1画面完結） */}
+      <main className="w-full max-w-xl flex-1 min-h-0 flex flex-col items-center justify-between px-2.5 sm:px-3 py-2 gap-1.5 overflow-hidden">
+        {phase === 'TITLE' && (
+          <TitleScreen
+            isPracticeMode={isPracticeMode}
+            setIsPracticeMode={setIsPracticeMode}
+            onStartGame={() => {
+              setStageRecords({});
+              initStage(0, false);
+            }}
+          />
+        )}
+
+        {phase === 'SUMMARY' && (
+          <SummaryScreen
+            stageRecords={stageRecords}
+            officialTotalScore={officialTotalScore}
+            onPracticeStage={(idx) => initStage(idx, true)}
+            onRestartAll={() => {
+              setStageRecords({});
+              initStage(0, false);
+            }}
+            onBackToTitle={() => setPhase('TITLE')}
+          />
+        )}
+
+        {isGameActive && (
+          <>
+            {/* プレイ中のみ表示する進行ガイドバー（回答・結果ドロワー表示時は自動で畳んでキャンバス表示領域を最大化） */}
+            {!isDockExpanded && (
+              <div className="w-full px-3 py-1.5 rounded-xl bg-slate-900/90 border border-white/10 flex items-center justify-between gap-2 text-xs shrink-0">
+                <div className="flex items-center gap-1.5 min-w-0 truncate">
+                  <CheckCircle2
+                    className={`w-3.5 h-3.5 shrink-0 ${
+                      hasCluesRevealed ? 'text-emerald-400' : 'text-sky-400'
+                    }`}
+                  />
+                  <span className="text-slate-200 truncate">
+                    {hasCluesRevealed
+                      ? '写真の一部が露出中！分かった瞬間に「回答する（Enter）」で早押しクリア！'
+                      : 'クリア条件：3回当てて0%枠を開け、何の写真か分かったら「回答する」'}
+                  </span>
+                </div>
+                <span className="text-[11px] text-slate-400 whitespace-nowrap shrink-0 hidden sm:inline">
+                  ヒント：{currentStage.categoryLabel}
+                </span>
+              </div>
+            )}
+
+            {/* 中央ゲームキャンバス領域 */}
+            <div className="relative w-full flex-1 min-h-0 bg-slate-950 rounded-2xl overflow-hidden border border-white/10 shadow-2xl flex items-center justify-center">
+              <canvas
+                ref={canvasRef}
+                width={CANVAS_WIDTH}
+                height={CANVAS_HEIGHT}
+                onPointerDown={(e) => {
+                  if (phase !== 'PLAYING' && phase !== 'READY') return;
+                  const rect = e.currentTarget.getBoundingClientRect();
+                  updatePaddleFromClientX(e.clientX, rect);
+                }}
+                onPointerMove={(e) => {
+                  if (phase !== 'PLAYING' && phase !== 'READY') return;
+                  if (e.pointerType !== 'mouse' && e.buttons === 0 && e.pressure === 0) return;
+                  const rect = e.currentTarget.getBoundingClientRect();
+                  updatePaddleFromClientX(e.clientX, rect);
+                }}
+                onClick={() => {
+                  if (
+                    phase === 'READY' ||
+                    (phase === 'PLAYING' && ballRef.current.attachedToPaddle)
+                  ) {
+                    launchBallFromPaddle();
+                    setPhase('PLAYING');
+                  }
+                }}
+                className="w-full h-full object-contain block cursor-pointer touch-none"
+              />
+
+              {/* 発射待機時のコンパクトなローンチトリガー */}
+              {(phase === 'READY' ||
+                (phase === 'PLAYING' && ballRef.current.attachedToPaddle)) && (
+                <div className="absolute inset-x-4 bottom-14 pointer-events-none flex flex-col items-center">
+                  <div className="bg-slate-900/90 border border-white/15 rounded-2xl px-4 py-2.5 text-center shadow-2xl pointer-events-auto backdrop-blur-md">
+                    <div className="text-[11px] text-slate-300 font-medium">
+                      カテゴリ：<span className="text-white font-semibold">{currentStage.categoryLabel}</span>
+                      <span className="mx-1.5 text-slate-600">·</span>
+                      <span className="text-amber-300">★枠を割ると周囲も連鎖削り</span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        launchBallFromPaddle();
+                        setPhase('PLAYING');
+                      }}
+                      className="mt-1.5 min-h-9 px-5 py-1.5 rounded-xl bg-sky-500 hover:bg-sky-400 text-slate-950 font-bold text-xs shadow transition inline-flex items-center gap-1.5 cursor-pointer whitespace-nowrap"
+                    >
+                      <Play className="w-3.5 h-3.5 fill-current" />
+                      <span>ボールを発射</span>
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* カウントダウンオーバーレイ */}
+              {phase === 'COUNTDOWN' && (
+                <div className="absolute inset-0 bg-slate-950/65 backdrop-blur-sm flex flex-col items-center justify-center z-20">
+                  <div className="text-xs font-medium text-sky-400 mb-1">再開まで</div>
+                  <div className="text-5xl font-extrabold text-white font-mono tabular-nums">
+                    {countdownValue}
+                  </div>
+                </div>
+              )}
+
+              {/* 一時停止オーバーレイ */}
+              {phase === 'PAUSED' && (
+                <div className="absolute inset-0 bg-slate-950/85 backdrop-blur-sm flex flex-col items-center justify-center p-4 z-20">
+                  <div className="w-full max-w-xs bg-slate-900 border border-white/15 rounded-2xl p-4 text-center space-y-3 shadow-2xl">
+                    <h3 className="text-base font-bold text-white">一時停止</h3>
+                    <p className="text-xs text-slate-400">
+                      {pauseReason === 'TAB_HIDDEN' && 'タブが非表示になったため一時停止しました。'}
+                      {pauseReason === 'WINDOW_BLUR' && 'フォーカスが外れたため一時停止しました。'}
+                      {pauseReason === 'ORIENTATION' && '画面の向きが変わったため一時停止しました。'}
+                      {pauseReason === 'MANUAL' && 'ゲームを一時停止しています。'}
+                    </p>
+                    <div className="flex flex-col gap-2 pt-1">
+                      <button
+                        type="button"
+                        onClick={requestResumeFromPause}
+                        className="w-full min-h-10 rounded-xl bg-sky-500 hover:bg-sky-400 text-slate-950 font-bold text-xs transition cursor-pointer"
+                      >
+                        プレイを再開
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setPhase('TITLE')}
+                        className="w-full min-h-9 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-medium border border-white/10 transition cursor-pointer"
+                      >
+                        ホームへ戻る
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* 下部コントロールバー / ドロワー */}
+            <div className="w-full shrink-0">
+              {(phase === 'ANSWERING' || phase === 'LAST_CHANCE') && (
+                <AnswerDock
+                  phase={phase}
+                  lastChanceReason={lastChanceReason}
+                  currentStage={currentStage}
+                  potentialNormalScore={stageMetrics.potentialNormalScore}
+                  elapsedSec={stageMetrics.elapsedSec}
+                  answerInput={answerInput}
+                  setAnswerInput={setAnswerInput}
+                  answerInputElementRef={answerInputElementRef}
+                  answerFeedback={answerFeedback}
+                  onSubmitAnswer={handleSubmitAnswer}
+                  onReturnFromAnswer={handleReturnFromAnswerModal}
+                  onGiveUpAndReveal={handleGiveUpAndReveal}
+                />
+              )}
+
+              {phase === 'STAGE_RESULT' && currentStageRecord && (
+                <StageResultDock
+                  currentStage={currentStage}
+                  currentStageIndex={currentStageIndex}
+                  currentStageRecord={currentStageRecord}
+                  onNextStageOrSummary={() => {
+                    if (currentStageIndex + 1 < PUZZLE_STAGES.length) {
+                      initStage(currentStageIndex + 1, false);
+                    } else {
+                      setPhase('SUMMARY');
+                    }
+                  }}
+                  onRetrySameStagePractice={() => initStage(currentStageIndex, true)}
+                  onGoToSummary={() => setPhase('SUMMARY')}
+                />
+              )}
+
+              {phase !== 'ANSWERING' && phase !== 'LAST_CHANCE' && phase !== 'STAGE_RESULT' && (
+                <div className="w-full flex items-center gap-2">
+                  {/* 左移動ボタン */}
+                  <button
+                    type="button"
+                    disabled={phase !== 'PLAYING' && phase !== 'READY'}
+                    onPointerDown={(e) => {
+                      e.currentTarget.setPointerCapture(e.pointerId);
+                      buttonHoldRef.current.left = true;
+                    }}
+                    onPointerUp={() => {
+                      buttonHoldRef.current.left = false;
+                    }}
+                    onPointerCancel={() => {
+                      buttonHoldRef.current.left = false;
+                    }}
+                    onPointerLeave={() => {
+                      buttonHoldRef.current.left = false;
+                    }}
+                    className="touch-drag-zone min-w-11 min-h-11 rounded-xl bg-slate-900 hover:bg-slate-800 active:bg-sky-900/60 border border-white/10 text-slate-200 flex items-center justify-center disabled:opacity-40 transition cursor-pointer shrink-0"
+                    aria-label="左へ移動"
+                  >
+                    <ChevronLeft className="w-5 h-5" />
+                  </button>
+
+                  {/* パドルスライドトラック */}
+                  <div
+                    onPointerDown={(e) => {
+                      if (phase !== 'PLAYING' && phase !== 'READY') return;
+                      e.currentTarget.setPointerCapture(e.pointerId);
+                      const rect = e.currentTarget.getBoundingClientRect();
+                      updatePaddleFromClientX(e.clientX, rect);
+                    }}
+                    onPointerMove={(e) => {
+                      if (phase !== 'PLAYING' && phase !== 'READY') return;
+                      if (e.buttons === 0 && e.pressure === 0) return;
+                      const rect = e.currentTarget.getBoundingClientRect();
+                      updatePaddleFromClientX(e.clientX, rect);
+                    }}
+                    className="touch-drag-zone flex-1 min-h-11 rounded-xl bg-slate-900/95 border border-white/10 px-3 flex items-center justify-center cursor-ew-resize select-none"
+                  >
+                    <span className="text-xs font-medium text-slate-400 whitespace-nowrap">
+                      ◀ スライドでパドル操作 ▶
+                    </span>
+                  </div>
+
+                  {/* 右移動ボタン */}
+                  <button
+                    type="button"
+                    disabled={phase !== 'PLAYING' && phase !== 'READY'}
+                    onPointerDown={(e) => {
+                      e.currentTarget.setPointerCapture(e.pointerId);
+                      buttonHoldRef.current.right = true;
+                    }}
+                    onPointerUp={() => {
+                      buttonHoldRef.current.right = false;
+                    }}
+                    onPointerCancel={() => {
+                      buttonHoldRef.current.right = false;
+                    }}
+                    onPointerLeave={() => {
+                      buttonHoldRef.current.right = false;
+                    }}
+                    className="touch-drag-zone min-w-11 min-h-11 rounded-xl bg-slate-900 hover:bg-slate-800 active:bg-sky-900/60 border border-white/10 text-slate-200 flex items-center justify-center disabled:opacity-40 transition cursor-pointer shrink-0"
+                    aria-label="右へ移動"
+                  >
+                    <ChevronRight className="w-5 h-5" />
+                  </button>
+
+                  {/* クリアへ直結する「回答する」プライマリボタン */}
+                  <button
+                    type="button"
+                    disabled={phase !== 'PLAYING' && phase !== 'READY'}
+                    onClick={handleOpenAnswerModal}
+                    className={`min-h-11 px-4 sm:px-5 rounded-xl active:scale-[0.99] disabled:opacity-40 text-slate-950 font-bold text-xs sm:text-sm shadow-lg transition flex items-center justify-center gap-2 cursor-pointer whitespace-nowrap shrink-0 ${
+                      hasCluesRevealed
+                        ? 'bg-emerald-400 hover:bg-emerald-300 shadow-emerald-500/25 ring-2 ring-emerald-300/60'
+                        : 'bg-sky-500 hover:bg-sky-400 shadow-sky-500/20'
+                    }`}
+                    title="ショートカット: Enterキーで即座に回答欄を開く"
+                  >
+                    <span>回答する</span>
+                    <span className="font-mono tabular-nums text-xs bg-slate-950/15 px-1.5 py-0.5 rounded">
+                      +{stageMetrics.potentialNormalScore}
+                    </span>
+                  </button>
+                </div>
+              )}
+            </div>
+          </>
+        )}
+      </main>
+    </div>
+  );
+}
