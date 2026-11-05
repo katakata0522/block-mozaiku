@@ -138,7 +138,7 @@ export const AnswerDock: React.FC<AnswerDockProps> = ({
           {/* かなパッド直下の補助キー（1文字消す ＆ 全消去） */}
           <div className="flex items-center justify-between gap-1.5 px-0.5 pt-0.5 border-t border-zinc-200/60">
             <span className="text-[10px] text-zinc-400 truncate">
-              {currentStage.categoryLabel}
+              {currentStage.categoryLabel.replace(/[（(][^）)]*[）)]/g, '').trim()}
             </span>
             <div className="flex items-center gap-1 shrink-0">
               <button

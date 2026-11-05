@@ -233,6 +233,9 @@ export default function App() {
 
   const tilesRef = useRef<TileState[]>([]);
   const paddleXRef = useRef<number>((CANVAS_WIDTH - PADDLE_WIDTH) / 2);
+  const paddleVxRef = useRef<number>(0);
+  const lastPaddleXRef = useRef<number>((CANVAS_WIDTH - PADDLE_WIDTH) / 2);
+  const lastPaddleTimeRef = useRef<number>(performance.now());
   const ballRef = useRef<{
     x: number;
     y: number;
@@ -1183,14 +1186,18 @@ export default function App() {
       if (currentPhase === 'PLAYING' || currentPhase === 'READY') {
         const moveLeft = keysPressedRef.current.left || buttonHoldRef.current.left;
         const moveRight = keysPressedRef.current.right || buttonHoldRef.current.right;
-        const paddleSpeed = 520;
+        const paddleSpeed = 540;
         if (moveLeft && !moveRight) {
           paddleXRef.current = Math.max(12, paddleXRef.current - paddleSpeed * dt);
+          paddleVxRef.current = -paddleSpeed;
         } else if (moveRight && !moveLeft) {
           paddleXRef.current = Math.min(
             CANVAS_WIDTH - PADDLE_WIDTH - 12,
             paddleXRef.current + paddleSpeed * dt
           );
+          paddleVxRef.current = paddleSpeed;
+        } else {
+          paddleVxRef.current *= 0.85;
         }
 
         if (ballRef.current.attachedToPaddle) {
@@ -1332,18 +1339,26 @@ export default function App() {
                 soundEngine.playBounce(true);
                 break;
               } else {
-                const maxBounceAngle = (60 * Math.PI) / 180;
-                const paddleJitter = (Math.random() - 0.5) * 0.08;
-                const bounceAngle = Math.max(
-                  -maxBounceAngle,
-                  Math.min(maxBounceAngle, hitOffset * maxBounceAngle + paddleJitter)
-                );
+                // 本格ブロック崩し（アルカノイド仕様）角度コントロール：
+                // 1. パドルの接触位置（hitOffset: -1.0〜+1.0）に応じた非線形アングルカーブ（最大68度）
+                const sign = hitOffset >= 0 ? 1 : -1;
+                const absOffset = Math.abs(hitOffset);
+                const maxBounceAngle = (68 * Math.PI) / 180;
+                const curveRatio = Math.pow(absOffset, 1.18);
+                let bounceAngle = sign * curveRatio * maxBounceAngle;
+
+                // 2. パドルのスイング速度（スライステクニック）の反映
+                // パドルを右に振りながら打つと右奥へスライス、逆に切ると角度を相殺
+                const sliceImpulse = Math.max(-0.22, Math.min(0.22, (paddleVxRef.current / 750) * 0.22));
+                bounceAngle = Math.max(-maxBounceAngle, Math.min(maxBounceAngle, bounceAngle + sliceImpulse));
 
                 ball.vx = Math.sin(bounceAngle) * BASE_BALL_SPEED;
                 ball.vy = -Math.cos(bounceAngle) * BASE_BALL_SPEED;
                 normalizeAndEnforceMinVy(false);
                 ball.y = PADDLE_Y - BALL_RADIUS - 1;
-                soundEngine.playBounce(true);
+
+                // エッジスライス時は高音の軽快なヒット音
+                soundEngine.playBounce(absOffset > 0.65);
               }
             }
 
@@ -1581,6 +1596,12 @@ export default function App() {
       12,
       Math.min(CANVAS_WIDTH - PADDLE_WIDTH - 12, targetCenterX - PADDLE_WIDTH / 2)
     );
+    const now = performance.now();
+    const dtSec = Math.max(0.008, (now - lastPaddleTimeRef.current) / 1000);
+    const rawVx = (clampedX - lastPaddleXRef.current) / dtSec;
+    paddleVxRef.current = paddleVxRef.current * 0.35 + rawVx * 0.65;
+    lastPaddleXRef.current = clampedX;
+    lastPaddleTimeRef.current = now;
     paddleXRef.current = clampedX;
     if (ballRef.current.attachedToPaddle) {
       const clampedOffset = Math.max(
