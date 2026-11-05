@@ -59,6 +59,7 @@ import { TitleScreen } from './components/TitleScreen';
 import { SummaryScreen } from './components/SummaryScreen';
 import { AnswerDock, StageResultDock } from './components/GameModalsAndDocks';
 import { BrandLogo } from './components/BrandLogo';
+import { getStageCanonicalKana, generateMinhayaChoices } from './utils/minhayaChoices';
 import { soundEngine } from './utils/sound';
 
 function traceRoundedRect(
@@ -208,6 +209,9 @@ export default function App() {
   const totalCourseElapsedSecRef = useRef<number>(0);
 
   // --- 回答・結果状態 ---
+  const [inputKana, setInputKana] = useState<string>('');
+  const [currentChoices, setCurrentChoices] = useState<string[]>([]);
+  const [wrongPenaltyBanner, setWrongPenaltyBanner] = useState<string | null>(null);
   const [answerInput, setAnswerInput] = useState<string>('');
   const [answerFeedback, setAnswerFeedback] = useState<{
     type: 'EMPTY' | 'WRONG' | null;
@@ -318,6 +322,10 @@ export default function App() {
 
   const currentStage: PuzzleStage =
     activeStages[currentStageIndex] || activeStages[0] || PUZZLE_STAGES[0];
+
+  useEffect(() => {
+    (window as any).__CURRENT_STAGE__ = currentStage;
+  }, [currentStage]);
 
   const clearAllMovementInputs = useCallback(() => {
     keysPressedRef.current.left = false;
@@ -740,11 +748,66 @@ export default function App() {
     setPhaseBeforePause(cur);
     phaseBeforePauseRef.current = cur;
     setStageMetrics(calculateStageMetrics(tilesRef.current, elapsedMsRef.current));
-    setAnswerInput('');
-    setAnswerFeedback({ type: null, message: '' });
+    
+    // みんはや式 1文字目の4択生成
+    const canonical = getStageCanonicalKana(currentStage);
+    setInputKana('');
+    const initialChoices = generateMinhayaChoices(canonical, 0, currentStage.kanaPad);
+    setCurrentChoices(initialChoices);
+    
     setPhase('ANSWERING');
     soundEngine.playAnswerOpen();
-  }, [clearAllMovementInputs]);
+  }, [clearAllMovementInputs, currentStage]);
+
+  const handleSelectChoice = useCallback((selectedChar: string) => {
+    const canonical = getStageCanonicalKana(currentStage);
+    const currentLen = inputKana.length;
+    const expectedChar = canonical[currentLen];
+
+    if (selectedChar === expectedChar) {
+      // 正解文字タップ！
+      const newInput = inputKana + selectedChar;
+      setInputKana(newInput);
+      soundEngine.playTileBreak(comboRef.current + currentLen, false);
+
+      if (newInput.length === canonical.length) {
+        // 全文字完成！大正解！！
+        soundEngine.playCorrect();
+        finalizeStageResult(phase === 'LAST_CHANCE' ? 'LAST_CHANCE_CORRECT' : 'NORMAL_CORRECT');
+      } else {
+        // 次の文字の4択を生成
+        const nextChoices = generateMinhayaChoices(canonical, newInput.length, currentStage.kanaPad);
+        setCurrentChoices(nextChoices);
+      }
+    } else {
+      // 誤答文字タップ！案A：即座に+5秒加算 ＆ ブロック崩しへ強制復帰！
+      soundEngine.playMiss();
+      elapsedMsRef.current += 5000;
+      if (elapsedTimerSpanRef.current) {
+        const currentTotalSec = totalCourseElapsedSecRef.current + (elapsedMsRef.current / 1000);
+        elapsedTimerSpanRef.current.textContent = formatStopwatch(currentTotalSec);
+      }
+
+      setWrongPenaltyBanner(`❌ 不正解！（タイム+5.0秒加算）`);
+      window.setTimeout(() => setWrongPenaltyBanner(null), 2200);
+
+      setInputKana('');
+      setCurrentChoices([]);
+
+      if (phase === 'LAST_CHANCE') {
+        finalizeStageResult(
+          lastChanceReason === 'ALL_TILES_CLEARED'
+            ? 'ALL_REVEALED_UNSOLVED'
+            : 'GAVE_UP_OR_FAILED'
+        );
+      } else {
+        // ブロック崩しへ強制復帰（3, 2, 1 カウントダウン）
+        setCountdownValue(3);
+        setPhase('COUNTDOWN');
+        soundEngine.playCountdownTick();
+      }
+    }
+  }, [currentStage, inputKana, phase, lastChanceReason, finalizeStageResult]);
 
   const handleReturnFromAnswerModal = useCallback(() => {
     if (phaseRef.current !== 'ANSWERING') return;
@@ -1940,15 +2003,12 @@ export default function App() {
               {(phase === 'ANSWERING' || phase === 'LAST_CHANCE') && (
                 <AnswerDock
                   phase={phase}
-                  lastChanceReason={lastChanceReason}
                   currentStage={currentStage}
+                  targetKana={getStageCanonicalKana(currentStage)}
+                  inputKana={inputKana}
+                  currentChoices={currentChoices}
                   potentialNormalScore={stageMetrics.potentialNormalScore}
-                  elapsedSec={stageMetrics.elapsedSec}
-                  answerInput={answerInput}
-                  setAnswerInput={setAnswerInput}
-                  answerInputElementRef={answerInputElementRef}
-                  answerFeedback={answerFeedback}
-                  onSubmitAnswer={handleSubmitAnswer}
+                  onSelectChoice={handleSelectChoice}
                   onReturnFromAnswer={handleReturnFromAnswerModal}
                   onGiveUpAndReveal={handleGiveUpAndReveal}
                 />
