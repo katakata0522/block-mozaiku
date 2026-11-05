@@ -103,6 +103,16 @@ class SoundEngine {
     }
   }
 
+  /** ★コアタイル破壊・周囲連鎖爆縮時のズシンと響く重低音＆衝撃音 */
+  public playCoreBlast(): void {
+    // 重低音サブベース（地響きパンチ）
+    this.scheduleTone('triangle', 180, 36, 0, 0.38, 0.35, 'exp');
+    this.scheduleTone('sine', 85, 30, 0, 0.48, 0.4, 'exp');
+    // 炸裂・破片サウンド（キラめくクリスタル音）
+    this.scheduleTone('triangle', 880, 1760, 0.04, 0.24, 0.22, 'linear');
+    this.scheduleTone('sine', 1320, 2640, 0.08, 0.2, 0.16, 'linear');
+  }
+
   /** 「わかった」解答欄オープン音 */
   public playAnswerOpen(): void {
     this.scheduleTone('sine', 440, 440, 0, 0.11, 0.11);

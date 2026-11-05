@@ -41,6 +41,97 @@ export type PauseReason = 'MANUAL' | 'TAB_HIDDEN' | 'WINDOW_BLUR' | 'ORIENTATION
 
 export type SpeedRank = 'S' | 'A' | 'B' | 'C';
 
+export type CourseMode =
+  | 'RANDOM_5'
+  | 'RANDOM_10'
+  | 'HISTORY_HEROES'
+  | 'WORLD_MASTERPIECES'
+  | 'RETRO_PIXEL_ART'
+  | 'WORLD_HERITAGE'
+  | 'SPACE_AND_NATURE'
+  | 'VEHICLES_AND_FOODS'
+  | 'SPACE_VEHICLES'
+  | 'FOODS_AND_LIFE'
+  | 'ALL_STAGES'
+  | 'ANIMALS_AND_ITEMS'
+  | 'RANDOM_3'
+  | 'HISTORY_ART'
+  | 'PIXEL_NATURE';
+
+export interface CourseOption {
+  id: CourseMode;
+  title: string;
+  badge: string;
+  description: string;
+  stageCount: number;
+}
+
+export const COURSE_OPTIONS: CourseOption[] = [
+  {
+    id: 'RANDOM_5',
+    title: '🎲 ランダム5問',
+    badge: '手軽に遊ぶ',
+    description: '全100問から毎回ランダムに5問選出！スキマ時間に最適',
+    stageCount: 5,
+  },
+  {
+    id: 'RANDOM_10',
+    title: '⚡ ランダム10問',
+    badge: 'おすすめ',
+    description: '全100問から厳選10問！多彩なジャンルが次々登場',
+    stageCount: 10,
+  },
+  {
+    id: 'HISTORY_HEROES',
+    title: '⚔️ 歴史の偉人・英雄',
+    badge: '原本肖像画',
+    description: '信長・秀吉・家康・龍馬・西郷・聖徳太子・紫式部・アインシュタイン・ナポレオン等（全15問）',
+    stageCount: 15,
+  },
+  {
+    id: 'WORLD_MASTERPIECES',
+    title: '🎨 世界の傑作名画・至宝',
+    badge: '名画原本',
+    description: 'モナリザ・星月夜・最後の晩餐・ひまわり・叫び・波裏・風神雷神・考える人等（全12問）',
+    stageCount: 12,
+  },
+  {
+    id: 'RETRO_PIXEL_ART',
+    title: '👾 ドット絵＆アート',
+    badge: 'レトロ・CSS',
+    description: '王冠・盾・コイン・聖剣・ポーション・ゴースト・卵・ギター・砂時計・地球儀等（全19問）',
+    stageCount: 19,
+  },
+  {
+    id: 'WORLD_HERITAGE',
+    title: '🏛️ 世界遺産＆地球の神秘',
+    badge: '実写原本',
+    description: '万里の長城・タージマハル・サグラダファミリア・マチュピチュ・鳥居・エッフェル塔等（全16問）',
+    stageCount: 16,
+  },
+  {
+    id: 'SPACE_AND_NATURE',
+    title: '🌌 宇宙・大自然・動物',
+    badge: 'NASA/実写',
+    description: '地球・月・木星・土星・太陽・キリン・ゾウ・コアラ・イルカ・トラ・シマウマ等（全17問）',
+    stageCount: 17,
+  },
+  {
+    id: 'VEHICLES_AND_FOODS',
+    title: '🍔 乗り物＆おいしいグルメ',
+    badge: '実写原本',
+    description: '新幹線・飛行機・パトカー・ロケット・ラーメン・カレー・バーガー・寿司・ピザ等（全16問）',
+    stageCount: 16,
+  },
+  {
+    id: 'ALL_STAGES',
+    title: '👑 全100ステージ制覇',
+    badge: '究極制覇',
+    description: '名画・歴史・ドット絵・宇宙・世界遺産・グルメまで堂々全100問完全踏破！',
+    stageCount: 100,
+  },
+];
+
 export interface TileState {
   id: number;
   row: number;

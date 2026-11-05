@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React from 'react';
 import {
   CheckCircle2,
   XCircle,
@@ -6,7 +6,6 @@ import {
   RotateCcw,
   ArrowRight,
   Award,
-  Lightbulb,
   Delete,
   Timer,
   Keyboard,
@@ -44,12 +43,6 @@ export const AnswerDock: React.FC<AnswerDockProps> = ({
   onReturnFromAnswer,
   onGiveUpAndReveal,
 }) => {
-  const [showInitialKanaHint, setShowInitialKanaHint] = useState<boolean>(false);
-
-  useEffect(() => {
-    setShowInitialKanaHint(false);
-  }, [currentStage.id]);
-
   const handleAppendKana = (kana: string) => {
     if (answerInput.length + kana.length <= 40) {
       setAnswerInput(answerInput + kana);
@@ -64,13 +57,13 @@ export const AnswerDock: React.FC<AnswerDockProps> = ({
   };
 
   return (
-    <div className="w-full bg-slate-900/95 border border-white/15 rounded-2xl p-2.5 sm:p-3 shadow-2xl backdrop-blur-md space-y-1.5">
-      {/* 上部ステータス＆ヒント行 */}
+    <div className="w-full bg-white/95 border border-zinc-200 rounded-2xl p-2.5 sm:p-3 shadow-2xl backdrop-blur-md space-y-1.5 text-zinc-800">
+      {/* 上部ステータス行 */}
       <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
-        <div className="flex items-center gap-2 text-slate-200 font-medium">
+        <div className="flex items-center gap-2 text-zinc-700 font-medium">
           <span
             className={
-              phase === 'LAST_CHANCE' ? 'text-rose-400 font-bold' : 'text-emerald-400 font-bold'
+              phase === 'LAST_CHANCE' ? 'text-rose-600 font-bold' : 'text-emerald-600 font-bold'
             }
           >
             {phase === 'LAST_CHANCE'
@@ -81,51 +74,37 @@ export const AnswerDock: React.FC<AnswerDockProps> = ({
                 : 'タイムアップ・最終回答'
               : '早押し回答（タイピング入力）'}
           </span>
-          <span aria-hidden="true" className="text-slate-600">
+          <span aria-hidden="true" className="text-zinc-300">
             ·
           </span>
-          <span className="font-mono tabular-nums text-sky-300 font-bold">
+          <span className="font-mono tabular-nums text-blue-600 font-bold">
             +{phase === 'LAST_CHANCE' ? 100 : potentialNormalScore} pt
           </span>
-          <span aria-hidden="true" className="text-slate-600">
+          <span aria-hidden="true" className="text-zinc-300">
             ·
           </span>
-          <span className="font-mono tabular-nums text-slate-300 flex items-center gap-1">
-            <Timer className="w-3 h-3 text-sky-400" />
+          <span className="font-mono tabular-nums text-zinc-600 flex items-center gap-1">
+            <Timer className="w-3 h-3 text-blue-500" />
             {elapsedSec.toFixed(1)}s
           </span>
         </div>
 
         <div className="flex items-center gap-2">
-          <span className="text-[11px] text-slate-400 hidden sm:inline">
-            {currentStage.categoryLabel}
+          <span className="text-[11px] text-zinc-500 font-medium">
+            カテゴリ：{currentStage.categoryLabel}
           </span>
-          {!showInitialKanaHint ? (
-            <button
-              type="button"
-              onClick={() => setShowInitialKanaHint(true)}
-              className="text-[11px] px-2.5 py-0.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-sky-300 border border-white/10 flex items-center gap-1 transition cursor-pointer whitespace-nowrap"
-            >
-              <Lightbulb className="w-3 h-3" />
-              <span>頭文字ヒント</span>
-            </button>
-          ) : (
-            <span className="text-[11px] text-sky-300 font-semibold">
-              {currentStage.initialKanaHint}
-            </span>
-          )}
         </div>
       </div>
 
       <form onSubmit={onSubmitAnswer} className="space-y-1.5">
-        {/* 自由タイピング入力欄（ひらがな・カタカナ・漢字・ローマ字・英語すべて自動正規化判定） */}
+        {/* 自由タイピング入力欄 */}
         <div className="space-y-1">
-          <div className="flex items-center justify-between text-[11px] text-slate-400 px-0.5">
-            <span className="flex items-center gap-1 text-slate-300 font-medium">
-              <Keyboard className="w-3 h-3 text-sky-400" />
+          <div className="flex items-center justify-between text-[11px] text-zinc-500 px-0.5">
+            <span className="flex items-center gap-1 text-zinc-600 font-medium">
+              <Keyboard className="w-3 h-3 text-blue-500" />
               <span>ひらがな・カタカナ・漢字・ローマ字・英語すべて対応</span>
             </span>
-            <span className="text-[10px] text-slate-400 hidden sm:inline">
+            <span className="text-[10px] text-zinc-400 hidden sm:inline">
               Enterで回答送信 / Escで戻る
             </span>
           </div>
@@ -154,14 +133,14 @@ export const AnswerDock: React.FC<AnswerDockProps> = ({
                 }
               }}
               placeholder="答えを打って送信（ひらがな・カナ・漢字・英語OK）"
-              className="flex-1 min-h-9 sm:min-h-10 px-3 py-1 rounded-xl bg-slate-950 border border-sky-500/40 text-white placeholder-slate-500 text-xs sm:text-sm font-medium focus:outline-none focus:border-sky-400 focus:ring-1 focus:ring-sky-400/50"
+              className="flex-1 min-h-9 sm:min-h-10 px-3 py-1 rounded-xl bg-zinc-50 border border-zinc-300 text-zinc-900 placeholder-zinc-400 text-xs sm:text-sm font-medium focus:outline-none focus:bg-white focus:border-blue-500 focus:ring-1 focus:ring-blue-500/30"
               autoComplete="off"
             />
             {answerInput.length > 0 && (
               <button
                 type="button"
                 onClick={handleBackspace}
-                className="min-h-9 sm:min-h-10 px-2.5 py-1 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs border border-white/10 flex items-center gap-1 cursor-pointer whitespace-nowrap shrink-0"
+                className="min-h-9 sm:min-h-10 px-2.5 py-1 rounded-xl bg-zinc-100 hover:bg-zinc-200 text-zinc-700 text-xs border border-zinc-200 flex items-center gap-1 cursor-pointer whitespace-nowrap shrink-0"
                 title="1文字消す"
               >
                 <Delete className="w-3.5 h-3.5" />
@@ -170,22 +149,22 @@ export const AnswerDock: React.FC<AnswerDockProps> = ({
             )}
             <button
               type="submit"
-              className="min-h-9 sm:min-h-10 px-3.5 sm:px-4 py-1 rounded-xl bg-sky-500 hover:bg-sky-400 active:scale-[0.99] text-slate-950 font-bold text-xs sm:text-sm transition cursor-pointer whitespace-nowrap shrink-0 shadow-md shadow-sky-500/20"
+              className="min-h-9 sm:min-h-10 px-3.5 sm:px-4 py-1 rounded-xl bg-zinc-900 hover:bg-zinc-800 active:scale-[0.99] text-white font-bold text-xs sm:text-sm transition cursor-pointer whitespace-nowrap shrink-0 shadow-sm"
             >
               回答を送信
             </button>
           </div>
         </div>
 
-        {/* 1文字ずつ打てる16キーかなパッド（選択肢のネタバレを防ぎつつスマホでも片手で1文字ずつ打てる） */}
-        <div className="bg-slate-950/80 border border-white/10 rounded-xl p-1.5 space-y-1">
-          <div className="flex items-center justify-between px-1 text-[10px] text-slate-400">
+        {/* 1文字ずつ打てる16キーかなパッド */}
+        <div className="bg-zinc-50 border border-zinc-200 rounded-xl p-1.5 space-y-1">
+          <div className="flex items-center justify-between px-1 text-[10px] text-zinc-500">
             <span>かな文字パッド（1文字ずつタップ入力も可能）：</span>
             {answerInput.length > 0 && (
               <button
                 type="button"
                 onClick={() => setAnswerInput('')}
-                className="text-rose-300 hover:text-rose-200 font-medium cursor-pointer"
+                className="text-rose-600 hover:text-rose-700 font-medium cursor-pointer"
               >
                 入力クリア
               </button>
@@ -197,7 +176,7 @@ export const AnswerDock: React.FC<AnswerDockProps> = ({
                 key={`${currentStage.id}-kana-${idx}`}
                 type="button"
                 onClick={() => handleAppendKana(kana)}
-                className="min-h-7 sm:min-h-8 rounded-lg bg-slate-800/90 hover:bg-slate-700 active:bg-sky-500 active:text-slate-950 text-slate-100 font-bold text-xs border border-white/10 transition cursor-pointer flex items-center justify-center"
+                className="min-h-7 sm:min-h-8 rounded-lg bg-white hover:bg-zinc-100 active:bg-blue-600 active:text-white text-zinc-800 font-bold text-xs border border-zinc-200 shadow-xs transition cursor-pointer flex items-center justify-center"
               >
                 {kana}
               </button>
@@ -209,8 +188,8 @@ export const AnswerDock: React.FC<AnswerDockProps> = ({
           <div
             className={`px-3 py-1 rounded-lg text-xs font-medium flex items-center gap-2 ${
               answerFeedback.type === 'WRONG'
-                ? 'bg-rose-950/90 border border-rose-700/80 text-rose-200'
-                : 'bg-slate-800 border border-slate-700 text-slate-200'
+                ? 'bg-rose-50 border border-rose-200 text-rose-800'
+                : 'bg-zinc-100 border border-zinc-200 text-zinc-700'
             }`}
           >
             <XCircle className="w-3.5 h-3.5 shrink-0" />
@@ -223,18 +202,18 @@ export const AnswerDock: React.FC<AnswerDockProps> = ({
             <button
               type="button"
               onClick={onReturnFromAnswer}
-              className="min-h-8 px-3 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 font-medium text-xs border border-white/10 transition cursor-pointer whitespace-nowrap"
+              className="min-h-8 px-3 py-1 rounded-lg bg-zinc-100 hover:bg-zinc-200 text-zinc-700 font-medium text-xs border border-zinc-200 transition cursor-pointer whitespace-nowrap"
             >
               ボール打ち返しに戻る
             </button>
           ) : (
-            <span className="text-[11px] text-slate-400">最終回答は1回のみ送信できます</span>
+            <span className="text-[11px] text-zinc-500">最終回答は1回のみ送信できます</span>
           )}
 
           <button
             type="button"
             onClick={onGiveUpAndReveal}
-            className="min-h-8 px-3 py-1 rounded-lg bg-slate-900 hover:bg-slate-800 text-slate-400 hover:text-slate-200 font-medium text-xs border border-white/10 transition flex items-center gap-1.5 cursor-pointer whitespace-nowrap"
+            className="min-h-8 px-3 py-1 rounded-lg bg-white hover:bg-zinc-50 text-zinc-500 hover:text-zinc-800 font-medium text-xs border border-zinc-200 transition flex items-center gap-1.5 cursor-pointer whitespace-nowrap"
           >
             <Eye className="w-3.5 h-3.5" />
             <span>正解を見る（0 pt）</span>
@@ -270,57 +249,57 @@ export const StageResultDock: React.FC<StageResultDockProps> = ({
   );
 
   return (
-    <div className="w-full bg-slate-900/95 border border-white/10 rounded-2xl p-3 sm:p-3.5 shadow-2xl backdrop-blur-md space-y-2">
+    <div className="w-full bg-white/95 border border-zinc-200 rounded-2xl p-3 sm:p-3.5 shadow-2xl backdrop-blur-md space-y-2 text-zinc-800">
       <div className="flex items-center justify-between gap-3">
         <div className="flex items-center gap-2.5 min-w-0">
           {isCleared ? (
-            <CheckCircle2 className="w-6 h-6 text-emerald-400 shrink-0" />
+            <CheckCircle2 className="w-6 h-6 text-emerald-600 shrink-0" />
           ) : (
-            <Eye className="w-6 h-6 text-sky-400 shrink-0" />
+            <Eye className="w-6 h-6 text-blue-500 shrink-0" />
           )}
           <div className="min-w-0">
-            <div className="flex flex-wrap items-center gap-1.5 text-xs text-slate-400">
-              <span className="text-slate-200 font-semibold">
+            <div className="flex flex-wrap items-center gap-1.5 text-xs text-zinc-500">
+              <span className="text-zinc-800 font-semibold">
                 {currentStageRecord.resolutionType === 'NORMAL_CORRECT' && '早押しクリア'}
                 {currentStageRecord.resolutionType === 'LAST_CHANCE_CORRECT' && '最終回答クリア'}
                 {currentStageRecord.resolutionType === 'ALL_REVEALED_UNSOLVED' && 'モザイク0%・未正解'}
                 {currentStageRecord.resolutionType === 'GAVE_UP_OR_FAILED' && '正解表示'}
               </span>
-              <span aria-hidden="true">·</span>
-              <span className="font-mono tabular-nums text-sky-300 font-semibold">
+              <span aria-hidden="true" className="text-zinc-300">·</span>
+              <span className="font-mono tabular-nums text-blue-600 font-semibold">
                 タイム {currentStageRecord.elapsedSec.toFixed(1)}s
               </span>
               <span
                 className={`px-1.5 py-0.5 rounded text-[10px] font-mono font-bold ${
                   currentStageRecord.speedRank === 'S'
-                    ? 'bg-amber-400/20 text-amber-300 border border-amber-400/40'
+                    ? 'bg-amber-100 text-amber-800 border border-amber-300'
                     : currentStageRecord.speedRank === 'A'
-                    ? 'bg-emerald-400/20 text-emerald-300 border border-emerald-400/40'
-                    : 'bg-slate-800 text-slate-300 border border-white/10'
+                    ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
+                    : 'bg-zinc-100 text-zinc-700 border border-zinc-200'
                 }`}
               >
                 SPEED {currentStageRecord.speedRank}
               </span>
             </div>
-            <h3 className="text-base sm:text-lg font-bold text-white truncate">
+            <h3 className="text-base sm:text-lg font-bold text-zinc-900 truncate">
               正解：{currentStage.displayAnswer}
             </h3>
           </div>
         </div>
 
         <div className="text-right shrink-0">
-          <div className="text-[10px] text-slate-400">
+          <div className="text-[10px] text-zinc-500">
             {currentStageRecord.isPractice ? 'フリープレイ' : '獲得スコア'}
           </div>
-          <div className="text-xl font-extrabold font-mono tabular-nums text-sky-400">
-            +{currentStageRecord.score} <span className="text-xs font-normal">pt</span>
+          <div className="text-xl font-extrabold font-mono tabular-nums text-blue-600">
+            +{currentStageRecord.score} <span className="text-xs font-normal text-zinc-600">pt</span>
           </div>
         </div>
       </div>
 
       {/* 対戦・早押し用のスコア内訳＆ターゲットタイム比較バー */}
-      <div className="bg-slate-950/80 border border-white/10 rounded-xl px-3 py-1.5 flex flex-wrap items-center justify-between gap-2 text-[11px]">
-        <div className="text-slate-300 font-mono tabular-nums">
+      <div className="bg-zinc-50 border border-zinc-200 rounded-xl px-3 py-1.5 flex flex-wrap items-center justify-between gap-2 text-[11px]">
+        <div className="text-zinc-700 font-mono tabular-nums">
           {currentStageRecord.resolutionType === 'NORMAL_CORRECT' ? (
             <span>
               内訳: 基本100 + 残モザイク({currentStageRecord.mosaicPercent}%) {currentStageRecord.mosaicBonus} + 早押し {currentStageRecord.speedBonus}
@@ -334,16 +313,16 @@ export const StageResultDock: React.FC<StageResultDockProps> = ({
         <div className="font-mono tabular-nums">
           {isCleared ? (
             timeDiffSec >= 0 ? (
-              <span className="text-emerald-400 font-semibold">
+              <span className="text-emerald-700 font-semibold">
                 目標 {currentStageRecord.rivalTargetSec.toFixed(1)}s より {timeDiffSec.toFixed(1)}s 早い！
               </span>
             ) : (
-              <span className="text-slate-400">
+              <span className="text-zinc-500">
                 目標 {currentStageRecord.rivalTargetSec.toFixed(1)}s（+{Math.abs(timeDiffSec).toFixed(1)}s）
               </span>
             )
           ) : (
-            <span className="text-slate-500">
+            <span className="text-zinc-400">
               目標タイム {currentStageRecord.rivalTargetSec.toFixed(1)}s
             </span>
           )}
@@ -354,7 +333,7 @@ export const StageResultDock: React.FC<StageResultDockProps> = ({
         <button
           type="button"
           onClick={onNextStageOrSummary}
-          className="min-h-10 px-3 py-2 rounded-xl bg-sky-500 hover:bg-sky-400 text-slate-950 font-bold text-xs sm:text-sm transition flex items-center justify-center gap-1 cursor-pointer whitespace-nowrap"
+          className="min-h-10 px-3 py-2 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-white font-bold text-xs sm:text-sm transition flex items-center justify-center gap-1 cursor-pointer whitespace-nowrap shadow-xs"
         >
           <span>
             {currentStageIndex + 1 < PUZZLE_STAGES.length ? '次のステージへ' : 'トータル結果へ'}
@@ -365,7 +344,7 @@ export const StageResultDock: React.FC<StageResultDockProps> = ({
         <button
           type="button"
           onClick={onRetrySameStagePractice}
-          className="min-h-10 px-2.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 font-medium text-xs border border-white/10 transition flex items-center justify-center gap-1 cursor-pointer whitespace-nowrap"
+          className="min-h-10 px-2.5 py-2 rounded-xl bg-zinc-100 hover:bg-zinc-200 text-zinc-700 font-medium text-xs border border-zinc-200 transition flex items-center justify-center gap-1 cursor-pointer whitespace-nowrap"
         >
           <RotateCcw className="w-3.5 h-3.5 shrink-0" />
           <span>もう一度プレイ</span>
@@ -374,7 +353,7 @@ export const StageResultDock: React.FC<StageResultDockProps> = ({
         <button
           type="button"
           onClick={onGoToSummary}
-          className="min-h-10 px-2.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-medium text-xs border border-white/10 transition flex items-center justify-center gap-1 cursor-pointer whitespace-nowrap"
+          className="min-h-10 px-2.5 py-2 rounded-xl bg-zinc-100 hover:bg-zinc-200 text-zinc-700 font-medium text-xs border border-zinc-200 transition flex items-center justify-center gap-1 cursor-pointer whitespace-nowrap"
         >
           <Award className="w-3.5 h-3.5 shrink-0" />
           <span>スコア一覧</span>

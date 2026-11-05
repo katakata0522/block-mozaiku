@@ -50,6 +50,8 @@ import {
   StageScoreRecord,
   HitParticle,
   FloatingFeedback,
+  CourseMode,
+  COURSE_OPTIONS,
   calculateStageMetrics,
   getSpeedRank,
 } from './types/game';
@@ -80,14 +82,78 @@ function traceRoundedRect(
   }
 }
 
+function getStagesForCourse(course: CourseMode): PuzzleStage[] {
+  if (course === 'HISTORY_HEROES') {
+    // ⚔️ 歴史の偉人・英雄・古代（信長・秀吉・家康・龍馬・西郷・聖徳太子・紫式部・アインシュタイン・ベートーヴェン・ナポレオン等 全15問）
+    const targetIds = [4, 12, 51, 9, 11, 10, 55, 52, 53, 56, 57, 58, 54, 49, 50];
+    return targetIds
+      .map((id) => PUZZLE_STAGES.find((st) => st.id === id))
+      .filter((st): st is PuzzleStage => Boolean(st));
+  }
+  if (course === 'WORLD_MASTERPIECES') {
+    // 🎨 世界の傑作名画・至宝（モナリザ・星月夜・最後の晩餐・ひまわり・叫び・真珠の耳飾り・波裏・風神雷神・考える人・ヴィーナス誕生 全11問）
+    const targetIds = [13, 60, 59, 14, 15, 5, 16, 61, 62, 63, 64];
+    return targetIds
+      .map((id) => PUZZLE_STAGES.find((st) => st.id === id))
+      .filter((st): st is PuzzleStage => Boolean(st));
+  }
+  if (course === 'RETRO_PIXEL_ART') {
+    // 👾 レトロドット絵＆モダンアート（王冠・盾・コイン・ゴースト・卵・聖剣・ポーション・宇宙船・宝箱・キノコ・ギター・砂時計・地球儀等 全20問）
+    const targetIds = [93, 94, 95, 96, 97, 6, 24, 25, 26, 27, 28, 98, 99, 100, 29, 30, 31, 32, 33, 34];
+    return targetIds
+      .map((id) => PUZZLE_STAGES.find((st) => st.id === id))
+      .filter((st): st is PuzzleStage => Boolean(st));
+  }
+  if (course === 'WORLD_HERITAGE') {
+    // 🏛️ 世界遺産＆地球の神秘（万里の長城・タージマハル・サグラダファミリア・マチュピチュ・鳥居・エッフェル塔・金閣寺・ピラミッド・自由の女神等 全16問）
+    const targetIds = [66, 65, 67, 71, 69, 70, 68, 8, 7, 17, 18, 20, 19, 37, 38, 39];
+    return targetIds
+      .map((id) => PUZZLE_STAGES.find((st) => st.id === id))
+      .filter((st): st is PuzzleStage => Boolean(st));
+  }
+  if (course === 'SPACE_AND_NATURE' || course === 'SPACE_VEHICLES') {
+    // 🌌 宇宙・大自然・動物（地球・月・木星・土星・太陽・キリン・ゾウ・コアラ・イルカ・トラ・シマウマ・カメレオン・パンダ・ライオン・ペンギン 全16問）
+    const targetIds = [79, 36, 80, 35, 82, 81, 72, 73, 74, 75, 76, 78, 77, 21, 22, 23];
+    return targetIds
+      .map((id) => PUZZLE_STAGES.find((st) => st.id === id))
+      .filter((st): st is PuzzleStage => Boolean(st));
+  }
+  if (course === 'VEHICLES_AND_FOODS' || course === 'FOODS_AND_LIFE') {
+    // 🍔 乗り物＆おいしいグルメ（新幹線・飛行機・パトカー・ロケット・ラーメン・カレー・バーガー・寿司・ピザ・ケーキ等 全18問）
+    const targetIds = [40, 41, 83, 87, 84, 85, 86, 42, 43, 89, 90, 88, 46, 45, 47, 44, 91, 92];
+    return targetIds
+      .map((id) => PUZZLE_STAGES.find((st) => st.id === id))
+      .filter((st): st is PuzzleStage => Boolean(st));
+  }
+  if (course === 'ALL_STAGES') {
+    return [...PUZZLE_STAGES];
+  }
+  if (course === 'RANDOM_10') {
+    const shuffled = [...PUZZLE_STAGES].sort(() => Math.random() - 0.5);
+    return shuffled.slice(0, 10);
+  }
+  if (course === 'RANDOM_3') {
+    const shuffled = [...PUZZLE_STAGES].sort(() => Math.random() - 0.5);
+    return shuffled.slice(0, 3);
+  }
+  // デフォルト: RANDOM_5（全100問からランダムに5問シャッフル選出）
+  const shuffled = [...PUZZLE_STAGES].sort(() => Math.random() - 0.5);
+  return shuffled.slice(0, 5);
+}
+
 export default function App() {
   // --- 設定 ---
   const [isMuted, setIsMuted] = useState<boolean>(false);
   const [isPracticeMode, setIsPracticeMode] = useState<boolean>(false);
   const [catchAndAimMode, setCatchAndAimMode] = useState<boolean>(false);
+  const [selectedCourse, setSelectedCourse] = useState<CourseMode>('RANDOM_5');
 
   // --- ゲーム進行状態 ---
   const [phase, setPhase] = useState<GamePhase>('TITLE');
+  const [activeStages, setActiveStages] = useState<PuzzleStage[]>(() => getStagesForCourse('RANDOM_5'));
+  const activeStagesRef = useRef<PuzzleStage[]>(activeStages);
+  activeStagesRef.current = activeStages;
+
   const [currentStageIndex, setCurrentStageIndex] = useState<number>(0);
   const [isStageReplayPractice, setIsStageReplayPractice] = useState<boolean>(false);
   const [lives, setLives] = useState<number>(MAX_LIVES);
@@ -168,6 +234,40 @@ export default function App() {
   const particlesRef = useRef<HitParticle[]>([]);
   const floatingFeedbacksRef = useRef<FloatingFeedback[]>([]);
   const comboRef = useRef<number>(0);
+
+  // 画面揺れ（スクリーンシェイク）Ref: 残り時間、振幅、X/Yオフセット
+  const screenShakeRef = useRef<{
+    durationMs: number;
+    remainingMs: number;
+    magnitude: number;
+    shakeX: number;
+    shakeY: number;
+  }>({
+    durationMs: 0,
+    remainingMs: 0,
+    magnitude: 0,
+    shakeX: 0,
+    shakeY: 0,
+  });
+
+  // 衝撃波（ショックウェーブリング）＆全画面フラッシュRef
+  const shockwavesRef = useRef<
+    Array<{
+      x: number;
+      y: number;
+      radius: number;
+      maxRadius: number;
+      alpha: number;
+      color: string;
+    }>
+  >([]);
+  const flashAlphaRef = useRef<number>(0);
+
+  const triggerScreenShake = useCallback((magnitude: number = 11, durationMs: number = 280) => {
+    screenShakeRef.current.durationMs = durationMs;
+    screenShakeRef.current.remainingMs = durationMs;
+    screenShakeRef.current.magnitude = magnitude;
+  }, []);
   const remainingTimeMsRef = useRef<number>(STAGE_TIME_LIMIT_SEC * 1000);
   const lastDisplayedSecRef = useRef<number>(STAGE_TIME_LIMIT_SEC);
   const elapsedMsRef = useRef<number>(0);
@@ -196,7 +296,8 @@ export default function App() {
   const catchAndAimModeRef = useRef<boolean>(catchAndAimMode);
   catchAndAimModeRef.current = catchAndAimMode;
 
-  const currentStage: PuzzleStage = PUZZLE_STAGES[currentStageIndex] || PUZZLE_STAGES[0];
+  const currentStage: PuzzleStage =
+    activeStages[currentStageIndex] || activeStages[0] || PUZZLE_STAGES[0];
 
   const clearAllMovementInputs = useCallback(() => {
     keysPressedRef.current.left = false;
@@ -232,7 +333,9 @@ export default function App() {
     const createPixelatedLayer = (
       targetRef: React.MutableRefObject<HTMLCanvasElement | null>,
       blockSizePx: number,
-      veilAlpha: number
+      veilAlpha: number,
+      artworkBlendAlpha: number = 0,
+      gridLineAlpha: number = 0.2
     ) => {
       if (!targetRef.current) {
         targetRef.current = document.createElement('canvas');
@@ -257,34 +360,49 @@ export default function App() {
         pCtx.imageSmoothingEnabled = false;
         pCtx.drawImage(scratchCanvas, 0, 0, smallW, smallH, 0, 0, photoW, photoH);
 
+        // スマート露出：原画の輪郭・ディテールをブレンド（1回ヒットでうっすら、2回ヒットでかなり鮮明に）
+        if (artworkBlendAlpha > 0) {
+          pCtx.save();
+          pCtx.globalAlpha = artworkBlendAlpha;
+          pCtx.imageSmoothingEnabled = true;
+          pCtx.drawImage(artCanvas, 0, 0, photoW, photoH);
+          pCtx.restore();
+        }
+
         if (veilAlpha > 0) {
           pCtx.fillStyle = `rgba(9, 13, 22, ${veilAlpha})`;
           pCtx.fillRect(0, 0, photoW, photoH);
         }
 
-        pCtx.strokeStyle = 'rgba(15, 23, 42, 0.2)';
-        pCtx.lineWidth = 1;
-        pCtx.beginPath();
-        for (let gx = blockSizePx; gx < photoW; gx += blockSizePx) {
-          pCtx.moveTo(gx + 0.5, 0);
-          pCtx.lineTo(gx + 0.5, photoH);
+        if (gridLineAlpha > 0) {
+          pCtx.strokeStyle = `rgba(15, 23, 42, ${gridLineAlpha})`;
+          pCtx.lineWidth = 1;
+          pCtx.beginPath();
+          for (let gx = blockSizePx; gx < photoW; gx += blockSizePx) {
+            pCtx.moveTo(gx + 0.5, 0);
+            pCtx.lineTo(gx + 0.5, photoH);
+          }
+          for (let gy = blockSizePx; gy < photoH; gy += blockSizePx) {
+            pCtx.moveTo(0, gy + 0.5);
+            pCtx.lineTo(photoW, gy + 0.5);
+          }
+          pCtx.stroke();
         }
-        for (let gy = blockSizePx; gy < photoH; gy += blockSizePx) {
-          pCtx.moveTo(0, gy + 0.5);
-          pCtx.lineTo(photoW, gy + 0.5);
-        }
-        pCtx.stroke();
       }
     };
 
-    createPixelatedLayer(offscreenMosaic100Ref, 48, 0.14);
-    createPixelatedLayer(offscreenMosaic70Ref, 24, 0.08);
-    createPixelatedLayer(offscreenMosaic40Ref, 12, 0.04);
+    // 100%: 粗い抽象モザイク（原画透け0%）
+    createPixelatedLayer(offscreenMosaic100Ref, 44, 0.12, 0.0, 0.22);
+    // 70%: 中解像度モザイク ＋ 原画の輪郭がうっすら先行露出（透け28%）
+    createPixelatedLayer(offscreenMosaic70Ref, 22, 0.06, 0.28, 0.16);
+    // 40%: 高解像度マイクロモザイク ＋ ディテールがかなり鮮明に浮上（透け62%）
+    createPixelatedLayer(offscreenMosaic40Ref, 11, 0.02, 0.62, 0.08);
   }, []);
 
   useEffect(() => {
     return preloadStagePhotos((loadedStageId) => {
-      const activeStage = PUZZLE_STAGES[currentStageIndexRef.current] || PUZZLE_STAGES[0];
+      const activeStage =
+        activeStagesRef.current[currentStageIndexRef.current] || PUZZLE_STAGES[0];
       if (activeStage.id === loadedStageId) {
         prepareOffscreenArtwork(loadedStageId);
       }
@@ -362,8 +480,9 @@ export default function App() {
   }, [getLaunchAngleFromPaddle]);
 
   const initStage = useCallback(
-    (stageIdx: number, asReplayPractice: boolean) => {
-      const targetStage = PUZZLE_STAGES[stageIdx] || PUZZLE_STAGES[0];
+    (stageIdx: number, asReplayPractice: boolean, stageListOverride?: PuzzleStage[]) => {
+      const stageList = stageListOverride || activeStagesRef.current;
+      const targetStage = stageList[stageIdx] || stageList[0] || PUZZLE_STAGES[0];
 
       clearAllMovementInputs();
       prepareOffscreenArtwork(targetStage.id);
@@ -400,6 +519,17 @@ export default function App() {
     [clearAllMovementInputs, createInitialTiles, prepareOffscreenArtwork, resetBallOnPaddle]
   );
 
+  const startNewGame = useCallback(
+    (course: CourseMode = selectedCourse) => {
+      const stages = getStagesForCourse(course);
+      setActiveStages(stages);
+      activeStagesRef.current = stages;
+      setStageRecords({});
+      initStage(0, false, stages);
+    },
+    [initStage, selectedCourse]
+  );
+
   const transitionToLastChance = useCallback(
     (reason: 'ALL_TILES_CLEARED' | 'OUT_OF_LIVES' | 'TIME_UP') => {
       clearAllMovementInputs();
@@ -418,7 +548,8 @@ export default function App() {
   const finalizeStageResult = useCallback(
     (resolutionType: ResolutionType) => {
       clearAllMovementInputs();
-      const stage = PUZZLE_STAGES[currentStageIndexRef.current] || PUZZLE_STAGES[0];
+      const stage =
+        activeStagesRef.current[currentStageIndexRef.current] || PUZZLE_STAGES[0];
       const metrics = calculateStageMetrics(tilesRef.current, elapsedMsRef.current);
       setStageMetrics(metrics);
       const isPracticeRun = isPracticeModeRef.current || isStageReplayPracticeRef.current;
@@ -659,11 +790,16 @@ export default function App() {
     ctx.save();
     ctx.clearRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
 
-    // 1. アリーナ全体のダークスタジオ背景
+    // ★コアタイル破壊時の「面白い程度の画面揺れ」を全体座標に適用
+    if (screenShakeRef.current.shakeX !== 0 || screenShakeRef.current.shakeY !== 0) {
+      ctx.translate(screenShakeRef.current.shakeX, screenShakeRef.current.shakeY);
+    }
+
+    // 1. アリーナ全体のクリーンなホワイト背景
     const arenaGrad = ctx.createLinearGradient(0, 0, 0, CANVAS_HEIGHT);
-    arenaGrad.addColorStop(0, '#090d16');
-    arenaGrad.addColorStop(0.55, '#0f172a');
-    arenaGrad.addColorStop(1, '#090d16');
+    arenaGrad.addColorStop(0, '#f8fafc');
+    arenaGrad.addColorStop(0.5, '#ffffff');
+    arenaGrad.addColorStop(1, '#f1f5f9');
     ctx.fillStyle = arenaGrad;
     ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
 
@@ -719,25 +855,30 @@ export default function App() {
           );
         }
 
-        // ★コアゾーン（0%にすると周囲4マスも1段階削るボーナス枠）の控えめなターゲット印
+        // 各タイルの繊細なグリッド仕切り線
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.45)';
+        ctx.lineWidth = 1;
+        ctx.strokeRect(tile.x, tile.y, tile.width, tile.height);
+
+        // ★コアゾーン（0%にすると周囲4マスも1段階削るボーナス枠）のターゲット印（白背景でも見やすいアンバーゴールド）
         if (tile.isCoreZone) {
-          ctx.strokeStyle = 'rgba(251, 191, 36, 0.55)';
-          ctx.lineWidth = 1.2;
+          ctx.strokeStyle = 'rgba(217, 119, 6, 0.85)';
+          ctx.lineWidth = 1.6;
           ctx.strokeRect(tile.x + 2, tile.y + 2, tile.width - 4, tile.height - 4);
-          ctx.fillStyle = 'rgba(15, 23, 42, 0.65)';
-          traceRoundedRect(ctx, tile.x + 5, tile.y + 5, 20, 14, 4);
+          ctx.fillStyle = 'rgba(254, 243, 199, 0.9)';
+          traceRoundedRect(ctx, tile.x + 5, tile.y + 5, 22, 16, 4);
           ctx.fill();
-          ctx.fillStyle = '#fbbf24';
-          ctx.font = 'bold 10px sans-serif';
+          ctx.fillStyle = '#b45309';
+          ctx.font = 'bold 11px sans-serif';
           ctx.textAlign = 'center';
           ctx.textBaseline = 'middle';
-          ctx.fillText('★', tile.x + 15, tile.y + 12.5);
+          ctx.fillText('★', tile.x + 16, tile.y + 13.5);
         }
 
         // ヒット直後（150ms以内）のホワイトフラッシュ
         const elapsedSinceHit = now - tile.lastHitAt;
         if (tile.lastHitAt > 0 && elapsedSinceHit < 150) {
-          const flashAlpha = (1 - elapsedSinceHit / 150) * 0.34;
+          const flashAlpha = (1 - elapsedSinceHit / 150) * 0.45;
           ctx.fillStyle = `rgba(255, 255, 255, ${flashAlpha})`;
           ctx.fillRect(tile.x, tile.y, tile.width, tile.height);
         }
@@ -754,18 +895,18 @@ export default function App() {
 
         const elapsedSinceClear = now - tile.clearedAt;
         if (tile.clearedAt > 0 && elapsedSinceClear < 350) {
-          const clearGlowAlpha = (1 - elapsedSinceClear / 350) * 0.45;
-          ctx.fillStyle = `rgba(56, 189, 248, ${clearGlowAlpha})`;
+          const clearGlowAlpha = (1 - elapsedSinceClear / 350) * 0.35;
+          ctx.fillStyle = `rgba(14, 165, 233, ${clearGlowAlpha})`;
           ctx.fillRect(rx, ry, rw, rh);
         }
 
-        ctx.strokeStyle = 'rgba(56, 189, 248, 0.72)';
-        ctx.lineWidth = 1.6;
+        ctx.strokeStyle = 'rgba(2, 132, 199, 0.85)';
+        ctx.lineWidth = 1.8;
         ctx.strokeRect(rx + 1.5, ry + 1.5, rw - 3, rh - 3);
 
         const cLen = 8;
         const pad = 2.5;
-        ctx.strokeStyle = 'rgba(255, 255, 255, 0.92)';
+        ctx.strokeStyle = '#0284c7';
         ctx.lineWidth = 2;
         ctx.beginPath();
         // 左上
@@ -789,8 +930,8 @@ export default function App() {
     }
 
     // 写真領域の下端境界ライン
-    ctx.strokeStyle = 'rgba(148, 163, 184, 0.25)';
-    ctx.lineWidth = 1;
+    ctx.strokeStyle = 'rgba(203, 213, 225, 0.8)';
+    ctx.lineWidth = 1.5;
     ctx.beginPath();
     ctx.moveTo(0, TILE_AREA_TOP + TILE_AREA_HEIGHT + 0.5);
     ctx.lineTo(CANVAS_WIDTH, TILE_AREA_TOP + TILE_AREA_HEIGHT + 0.5);
@@ -812,7 +953,7 @@ export default function App() {
       ctx.globalAlpha = 1;
     }
 
-    // 5. フローティングポップアップ（"0% CLEAR!", "★ CHAIN!" 等）
+    // 5. フローティングポップアップ（"0% CLEAR!", "★ CHAIN!" 等）白背景で視認性抜群
     if (floatingFeedbacksRef.current.length > 0) {
       ctx.save();
       ctx.font = 'bold 13px sans-serif';
@@ -820,8 +961,8 @@ export default function App() {
       ctx.textBaseline = 'middle';
       for (const fb of floatingFeedbacksRef.current) {
         ctx.globalAlpha = Math.max(0, Math.min(1, fb.alpha));
-        ctx.strokeStyle = 'rgba(9, 13, 22, 0.9)';
-        ctx.lineWidth = 3.5;
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.95)';
+        ctx.lineWidth = 4;
         ctx.strokeText(fb.text, fb.x, fb.y);
         ctx.fillStyle = fb.color;
         ctx.fillText(fb.text, fb.x, fb.y);
@@ -831,7 +972,7 @@ export default function App() {
 
     // 6. 下部の広いプレイフィールド上のパドル・発射ガイド・ボール
     if (!isFullRevealPhase) {
-      ctx.strokeStyle = 'rgba(148, 163, 184, 0.12)';
+      ctx.strokeStyle = 'rgba(226, 232, 240, 0.9)';
       ctx.lineWidth = 1;
       ctx.beginPath();
       ctx.moveTo(24, PADDLE_Y + PADDLE_HEIGHT / 2);
@@ -842,17 +983,17 @@ export default function App() {
       const py = PADDLE_Y;
       const pGrad = ctx.createLinearGradient(px, py, px, py + PADDLE_HEIGHT);
       if (catchAndAimModeRef.current) {
-        pGrad.addColorStop(0, '#34d399');
+        pGrad.addColorStop(0, '#10b981');
         pGrad.addColorStop(1, '#059669');
       } else {
-        pGrad.addColorStop(0, '#38bdf8');
-        pGrad.addColorStop(1, '#0284c7');
+        pGrad.addColorStop(0, '#1e293b');
+        pGrad.addColorStop(1, '#0f172a');
       }
       ctx.fillStyle = pGrad;
       traceRoundedRect(ctx, px, py, PADDLE_WIDTH, PADDLE_HEIGHT, 7);
       ctx.fill();
 
-      ctx.strokeStyle = catchAndAimModeRef.current ? '#a7f3d0' : '#bae6fd';
+      ctx.strokeStyle = catchAndAimModeRef.current ? '#34d399' : '#475569';
       ctx.lineWidth = 1.2;
       traceRoundedRect(ctx, px, py, PADDLE_WIDTH, PADDLE_HEIGHT, 7);
       ctx.stroke();
@@ -866,7 +1007,7 @@ export default function App() {
         const targetY = ball.y - Math.cos(launchAngle) * guideLen;
 
         ctx.save();
-        ctx.strokeStyle = 'rgba(56, 189, 248, 0.78)';
+        ctx.strokeStyle = 'rgba(2, 132, 199, 0.85)';
         ctx.lineWidth = 2;
         ctx.setLineDash([5, 5]);
         ctx.beginPath();
@@ -875,17 +1016,18 @@ export default function App() {
         ctx.stroke();
 
         ctx.setLineDash([]);
-        ctx.fillStyle = '#38bdf8';
+        ctx.fillStyle = '#0284c7';
         ctx.beginPath();
-        ctx.arc(targetX, targetY, 3.5, 0, Math.PI * 2);
+        ctx.arc(targetX, targetY, 4, 0, Math.PI * 2);
         ctx.fill();
         ctx.restore();
       }
 
-      // ボール描画
+      // ボール描画（白背景で視認性の高い、質感のあるダークスレート・ボール）
       ctx.save();
-      ctx.shadowColor = 'rgba(15, 23, 42, 0.9)';
-      ctx.shadowBlur = 6;
+      ctx.shadowColor = 'rgba(15, 23, 42, 0.25)';
+      ctx.shadowBlur = 8;
+      ctx.shadowOffsetY = 2;
       const bGrad = ctx.createRadialGradient(
         ball.x - 2.5,
         ball.y - 2.5,
@@ -895,16 +1037,38 @@ export default function App() {
         BALL_RADIUS
       );
       bGrad.addColorStop(0, '#ffffff');
-      bGrad.addColorStop(0.6, '#f8fafc');
-      bGrad.addColorStop(1, '#38bdf8');
+      bGrad.addColorStop(0.35, '#38bdf8');
+      bGrad.addColorStop(1, '#0369a1');
       ctx.fillStyle = bGrad;
       ctx.beginPath();
       ctx.arc(ball.x, ball.y, BALL_RADIUS, 0, Math.PI * 2);
       ctx.fill();
 
-      ctx.strokeStyle = '#0f172a';
-      ctx.lineWidth = 1.8;
+      ctx.strokeStyle = '#0c4a6e';
+      ctx.lineWidth = 1.5;
       ctx.stroke();
+      ctx.restore();
+    }
+
+    // ★コアタイル破壊時の衝撃波（ショックウェーブリング）描画
+    if (shockwavesRef.current.length > 0) {
+      ctx.save();
+      for (const sw of shockwavesRef.current) {
+        ctx.strokeStyle = sw.color;
+        ctx.globalAlpha = Math.max(0, sw.alpha);
+        ctx.lineWidth = 3.5;
+        ctx.beginPath();
+        ctx.arc(sw.x, sw.y, sw.radius, 0, Math.PI * 2);
+        ctx.stroke();
+      }
+      ctx.restore();
+    }
+
+    // ★コアタイル破壊時の全画面ライトフラッシュ
+    if (flashAlphaRef.current > 0) {
+      ctx.save();
+      ctx.fillStyle = `rgba(254, 243, 199, ${Math.min(0.42, flashAlphaRef.current)})`;
+      ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
       ctx.restore();
     }
 
@@ -922,6 +1086,40 @@ export default function App() {
       const dt = Math.min(rawDt, 0.033);
 
       const currentPhase = phaseRef.current;
+
+      // 画面揺れ（スクリーンシェイク）の更新（2乗減衰で鋭いインパクトと滑らかな収束）
+      if (screenShakeRef.current.remainingMs > 0) {
+        screenShakeRef.current.remainingMs = Math.max(
+          0,
+          screenShakeRef.current.remainingMs - dt * 1000
+        );
+        const progress =
+          screenShakeRef.current.remainingMs /
+          Math.max(1, screenShakeRef.current.durationMs);
+        const currentMag = screenShakeRef.current.magnitude * (progress * progress);
+        screenShakeRef.current.shakeX = (Math.random() * 2 - 1) * currentMag;
+        screenShakeRef.current.shakeY = (Math.random() * 2 - 1) * currentMag;
+      } else {
+        screenShakeRef.current.shakeX = 0;
+        screenShakeRef.current.shakeY = 0;
+      }
+
+      // ショックウェーブ（衝撃波リング）の更新
+      if (shockwavesRef.current.length > 0) {
+        for (let i = shockwavesRef.current.length - 1; i >= 0; i--) {
+          const sw = shockwavesRef.current[i];
+          sw.radius += dt * 450;
+          sw.alpha -= dt * 2.8;
+          if (sw.alpha <= 0 || sw.radius >= sw.maxRadius) {
+            shockwavesRef.current.splice(i, 1);
+          }
+        }
+      }
+
+      // 全画面ライトフラッシュの減衰
+      if (flashAlphaRef.current > 0) {
+        flashAlphaRef.current = Math.max(0, flashAlphaRef.current - dt * 3.2);
+      }
 
       if (currentPhase === 'PLAYING' || currentPhase === 'READY') {
         const moveLeft = keysPressedRef.current.left || buttonHoldRef.current.left;
@@ -953,7 +1151,8 @@ export default function App() {
         if (currentTenth !== lastDisplayedTenthRef.current) {
           lastDisplayedTenthRef.current = currentTenth;
           if (elapsedTimerSpanRef.current) {
-            const activeStage = PUZZLE_STAGES[currentStageIndexRef.current] || PUZZLE_STAGES[0];
+            const activeStage =
+              activeStagesRef.current[currentStageIndexRef.current] || PUZZLE_STAGES[0];
             const secStr = (currentTenth / 10).toFixed(1);
             elapsedTimerSpanRef.current.textContent = `${secStr}s / 目標${activeStage.rivalTargetSec.toFixed(1)}s`;
           }
@@ -1125,13 +1324,30 @@ export default function App() {
               if (hitTile.hp === 0) {
                 hitTile.clearedAt = now;
 
-                // ★コアゾーンを0%にした場合、隣接4マスのモザイクも1段階連鎖で削る！
+                // ★コアゾーンを0%にした場合、面白い程度の画面揺れ＆衝撃波＆重低音＆周囲8マス連鎖削り！
                 if (hitTile.isCoreZone) {
+                  triggerScreenShake(12, 280);
+                  flashAlphaRef.current = 0.38;
+                  shockwavesRef.current.push({
+                    x: tileCenterX,
+                    y: tileCenterY,
+                    radius: 12,
+                    maxRadius: 190,
+                    alpha: 1,
+                    color: '#f59e0b',
+                  });
+                  soundEngine.playCoreBlast();
+
+                  // 周囲8マス（3×3）のモザイクを一気に連鎖削り
                   const neighbors = [
+                    { c: hitTile.col - 1, r: hitTile.row - 1 },
+                    { c: hitTile.col,     r: hitTile.row - 1 },
+                    { c: hitTile.col + 1, r: hitTile.row - 1 },
                     { c: hitTile.col - 1, r: hitTile.row },
                     { c: hitTile.col + 1, r: hitTile.row },
-                    { c: hitTile.col, r: hitTile.row - 1 },
-                    { c: hitTile.col, r: hitTile.row + 1 },
+                    { c: hitTile.col - 1, r: hitTile.row + 1 },
+                    { c: hitTile.col,     r: hitTile.row + 1 },
+                    { c: hitTile.col + 1, r: hitTile.row + 1 },
                   ];
                   for (const nb of neighbors) {
                     if (nb.c >= 0 && nb.c < GRID_COLS && nb.r >= 0 && nb.r < GRID_ROWS) {
@@ -1142,18 +1358,36 @@ export default function App() {
                         if (nbTile.hp === 0) {
                           nbTile.clearedAt = now;
                         }
+                        // 連鎖で削られたマスからも破片を吹き飛ばす
+                        for (let k = 0; k < 4; k++) {
+                          const angle = Math.random() * Math.PI * 2;
+                          const spd = 65 + Math.random() * 55;
+                          particlesRef.current.push({
+                            x: nbTile.x + nbTile.width / 2,
+                            y: nbTile.y + nbTile.height / 2,
+                            vx: Math.cos(angle) * spd,
+                            vy: Math.sin(angle) * spd,
+                            color: nbTile.hp === 0 ? '#38bdf8' : '#e2e8f0',
+                            alpha: 0.9,
+                            size: 2.8,
+                            isSquare: true,
+                          });
+                        }
                       }
                     }
                   }
                   floatingFeedbacksRef.current.push({
                     x: tileCenterX,
                     y: tileCenterY,
-                    vy: -42,
-                    text: '★ CHAIN CLEAR!',
+                    vy: -48,
+                    text: '★ BLAST CHAIN! ★',
                     color: '#fbbf24',
                     alpha: 1,
                   });
                 } else {
+                  // 通常タイルの0%完全破壊時も、心地よい軽微な揺れ
+                  triggerScreenShake(3.5, 120);
+                  soundEngine.playTileBreak(comboRef.current, true);
                   floatingFeedbacksRef.current.push({
                     x: tileCenterX,
                     y: tileCenterY,
@@ -1165,6 +1399,7 @@ export default function App() {
                 }
               } else {
                 const nextPct = hitTile.hp === 2 ? '70%' : '40%';
+                soundEngine.playTileBreak(comboRef.current, false);
                 floatingFeedbacksRef.current.push({
                   x: tileCenterX,
                   y: tileCenterY,
@@ -1205,11 +1440,12 @@ export default function App() {
               }
               normalizeAndEnforceMinVy(true);
 
-              // モザイク破片エフェクト
-              const pCount = hitTile.hp === 0 ? 12 : 6;
+              // モザイク破片エフェクト（★コアタイル破壊時は32個のゴールドスパークが爆散！）
+              const isCoreBlast = hitTile.hp === 0 && hitTile.isCoreZone;
+              const pCount = isCoreBlast ? 32 : hitTile.hp === 0 ? 12 : 6;
               for (let i = 0; i < pCount; i++) {
                 const angle = (Math.PI * 2 * i) / pCount + Math.random() * 0.5;
-                const speed = (hitTile.hp === 0 ? 85 : 50) + Math.random() * 55;
+                const speed = (isCoreBlast ? 120 : hitTile.hp === 0 ? 85 : 50) + Math.random() * (isCoreBlast ? 90 : 55);
                 particlesRef.current.push({
                   x: hitClosestX,
                   y: hitClosestY,
@@ -1221,8 +1457,8 @@ export default function App() {
                         ? '#fbbf24'
                         : '#38bdf8'
                       : '#e2e8f0',
-                  alpha: 0.9,
-                  size: (hitTile.hp === 0 ? 4 : 2.8) + Math.random() * 1.5,
+                  alpha: 0.95,
+                  size: (isCoreBlast ? 4.5 : hitTile.hp === 0 ? 4 : 2.8) + Math.random() * 1.5,
                   isSquare: true,
                 });
               }
@@ -1231,7 +1467,9 @@ export default function App() {
               setStageMetrics(nextMetrics);
 
               if (hitTile.hp === 0) {
-                soundEngine.playTileBreak(nextMetrics.clearedCount, true);
+                if (!hitTile.isCoreZone) {
+                  soundEngine.playTileBreak(nextMetrics.clearedCount, true);
+                }
               } else {
                 soundEngine.playTileBreak(
                   nextMetrics.clearedCount + nextMetrics.damagedCount,
@@ -1383,7 +1621,7 @@ export default function App() {
     soundEngine.setMuted(next);
   };
 
-  const officialTotalScore = PUZZLE_STAGES.reduce((acc, st) => {
+  const officialTotalScore = activeStages.reduce((acc, st) => {
     const rec = stageRecords[st.id];
     return acc + (rec && !rec.isPractice ? rec.score : 0);
   }, 0);
@@ -1400,40 +1638,40 @@ export default function App() {
   const hasCluesRevealed = stageMetrics.clearedCount > 0 || stageMetrics.mosaicPercent <= 88;
 
   return (
-    <div className="h-dvh w-full bg-slate-950 text-slate-100 flex flex-col items-center justify-between select-none overflow-hidden">
-      {/* ネイティブアプリ風トップステータスバー（1行完結） */}
-      <header className="w-full max-w-xl h-12 px-3 flex items-center justify-between border-b border-white/10 bg-slate-900/80 backdrop-blur-md shrink-0">
+    <div className="h-dvh w-full bg-zinc-100 text-zinc-900 flex flex-col items-center justify-between select-none overflow-hidden">
+      {/* クリーンなトップステータスバー（1行完結） */}
+      <header className="w-full max-w-xl h-12 px-3 flex items-center justify-between border-b border-zinc-200 bg-white/90 backdrop-blur-md shrink-0 shadow-xs">
         <div className="flex items-center gap-2 min-w-0">
           {isGameActive ? (
             <button
               type="button"
               onClick={() => setPhase('TITLE')}
-              className="min-h-8 min-w-8 px-2 rounded-lg bg-slate-800/80 hover:bg-slate-700 text-slate-300 border border-white/10 flex items-center justify-center transition cursor-pointer"
+              className="min-h-8 min-w-8 px-2 rounded-lg bg-zinc-100 hover:bg-zinc-200 text-zinc-700 border border-zinc-200 flex items-center justify-center transition cursor-pointer"
               title="ホームへ戻る"
               aria-label="ホームへ戻る"
             >
               <Home className="w-3.5 h-3.5" />
             </button>
           ) : (
-            <span className="w-2 h-2 rounded-full bg-sky-400 shrink-0" />
+            <span className="w-2 h-2 rounded-full bg-blue-600 shrink-0" />
           )}
 
           {isGameActive ? (
-            <div className="flex items-center gap-2 text-xs font-medium text-slate-300 truncate">
-              <span className="font-mono font-bold text-white whitespace-nowrap">
-                {currentStage.title} / 3
+            <div className="flex items-center gap-2 text-xs font-medium text-zinc-700 truncate">
+              <span className="font-mono font-bold text-zinc-900 whitespace-nowrap">
+                STAGE {currentStageIndex + 1}/{activeStages.length}
               </span>
-              <span aria-hidden="true" className="text-slate-600">
+              <span aria-hidden="true" className="text-zinc-300">
                 ·
               </span>
-              <span className="font-mono tabular-nums text-sky-300 whitespace-nowrap">
+              <span className="font-mono tabular-nums text-blue-600 font-bold whitespace-nowrap">
                 モザイク {stageMetrics.mosaicPercent}%
               </span>
-              <span aria-hidden="true" className="text-slate-600 hidden sm:inline">
+              <span aria-hidden="true" className="text-zinc-300 hidden sm:inline">
                 ·
               </span>
               <span
-                className="font-mono tabular-nums text-emerald-300 whitespace-nowrap hidden sm:inline-flex items-center gap-1"
+                className="font-mono tabular-nums text-emerald-700 whitespace-nowrap hidden sm:inline-flex items-center gap-1 font-semibold"
                 title={`ライバル目標タイム: ${currentStage.rivalTargetSec.toFixed(1)}s`}
               >
                 <Timer className="w-3 h-3" />
@@ -1443,7 +1681,7 @@ export default function App() {
               </span>
             </div>
           ) : (
-            <span className="text-sm font-bold tracking-tight text-white truncate">
+            <span className="text-sm font-bold tracking-tight text-zinc-900 truncate">
               モザイクブレイク
             </span>
           )}
@@ -1460,18 +1698,18 @@ export default function App() {
                     className={`w-3.5 h-3.5 transition ${
                       idx < lives
                         ? 'text-rose-500 fill-rose-500'
-                        : 'text-slate-700 fill-slate-800'
+                        : 'text-zinc-300 fill-zinc-200'
                     }`}
                   />
                 ))}
               </div>
 
-              <span aria-hidden="true" className="text-slate-700">
+              <span aria-hidden="true" className="text-zinc-300">
                 ·
               </span>
 
-              <div className="flex items-center gap-1 text-xs font-mono tabular-nums text-slate-200">
-                <Clock className="w-3.5 h-3.5 text-sky-400" />
+              <div className="flex items-center gap-1 text-xs font-mono tabular-nums text-zinc-700">
+                <Clock className="w-3.5 h-3.5 text-blue-500" />
                 <span>{isPracticeMode ? 'FREE' : formatRemainingSeconds(remainingSeconds)}</span>
               </div>
 
@@ -1480,8 +1718,8 @@ export default function App() {
                 onClick={() => setCatchAndAimMode((prev) => !prev)}
                 className={`min-h-8 px-2 rounded-lg text-[11px] font-medium border transition flex items-center gap-1 cursor-pointer whitespace-nowrap ${
                   catchAndAimMode
-                    ? 'bg-emerald-950/90 border-emerald-500/50 text-emerald-300'
-                    : 'bg-slate-800/80 border-white/10 text-slate-400 hover:text-slate-200'
+                    ? 'bg-emerald-100 border-emerald-300 text-emerald-800'
+                    : 'bg-zinc-100 hover:bg-zinc-200 border-zinc-200 text-zinc-600'
                 }`}
                 title="パドルでボールをキャッチして狙い撃ちするモード"
               >
@@ -1494,14 +1732,14 @@ export default function App() {
           <button
             type="button"
             onClick={toggleMute}
-            className="min-h-8 min-w-8 px-2 rounded-lg bg-slate-800/80 border border-white/10 text-slate-200 hover:bg-slate-700 transition flex items-center justify-center cursor-pointer"
+            className="min-h-8 min-w-8 px-2 rounded-lg bg-zinc-100 border border-zinc-200 text-zinc-700 hover:bg-zinc-200 transition flex items-center justify-center cursor-pointer"
             aria-label={isMuted ? '音声をオンにする' : '音声をミュートする'}
             title={isMuted ? 'ミュート解除' : 'ミュート'}
           >
             {isMuted ? (
-              <VolumeX className="w-3.5 h-3.5 text-rose-400" />
+              <VolumeX className="w-3.5 h-3.5 text-rose-500" />
             ) : (
-              <Volume2 className="w-3.5 h-3.5 text-sky-400" />
+              <Volume2 className="w-3.5 h-3.5 text-blue-600" />
             )}
           </button>
 
@@ -1510,7 +1748,7 @@ export default function App() {
               type="button"
               disabled={phase !== 'PLAYING' && phase !== 'READY'}
               onClick={() => triggerPause('MANUAL')}
-              className="min-h-8 min-w-8 px-2 rounded-lg bg-slate-800/80 border border-white/10 text-slate-200 hover:bg-slate-700 disabled:opacity-40 transition flex items-center justify-center cursor-pointer"
+              className="min-h-8 min-w-8 px-2 rounded-lg bg-zinc-100 border border-zinc-200 text-zinc-700 hover:bg-zinc-200 disabled:opacity-40 transition flex items-center justify-center cursor-pointer"
               aria-label="一時停止"
               title="一時停止"
             >
@@ -1526,22 +1764,19 @@ export default function App() {
           <TitleScreen
             isPracticeMode={isPracticeMode}
             setIsPracticeMode={setIsPracticeMode}
-            onStartGame={() => {
-              setStageRecords({});
-              initStage(0, false);
-            }}
+            selectedCourse={selectedCourse}
+            setSelectedCourse={setSelectedCourse}
+            onStartGame={() => startNewGame(selectedCourse)}
           />
         )}
 
         {phase === 'SUMMARY' && (
           <SummaryScreen
+            activeStages={activeStages}
             stageRecords={stageRecords}
             officialTotalScore={officialTotalScore}
             onPracticeStage={(idx) => initStage(idx, true)}
-            onRestartAll={() => {
-              setStageRecords({});
-              initStage(0, false);
-            }}
+            onRestartAll={() => startNewGame(selectedCourse)}
             onBackToTitle={() => setPhase('TITLE')}
           />
         )}
@@ -1550,27 +1785,27 @@ export default function App() {
           <>
             {/* プレイ中のみ表示する進行ガイドバー（回答・結果ドロワー表示時は自動で畳んでキャンバス表示領域を最大化） */}
             {!isDockExpanded && (
-              <div className="w-full px-3 py-1.5 rounded-xl bg-slate-900/90 border border-white/10 flex items-center justify-between gap-2 text-xs shrink-0">
+              <div className="w-full px-3 py-1.5 rounded-xl bg-white/95 border border-zinc-200 flex items-center justify-between gap-2 text-xs shrink-0 shadow-xs">
                 <div className="flex items-center gap-1.5 min-w-0 truncate">
                   <CheckCircle2
                     className={`w-3.5 h-3.5 shrink-0 ${
-                      hasCluesRevealed ? 'text-emerald-400' : 'text-sky-400'
+                      hasCluesRevealed ? 'text-emerald-600' : 'text-blue-500'
                     }`}
                   />
-                  <span className="text-slate-200 truncate">
+                  <span className="text-zinc-700 truncate">
                     {hasCluesRevealed
                       ? '写真の一部が露出中！分かった瞬間に「回答する（Enter）」で早押しクリア！'
                       : 'クリア条件：3回当てて0%枠を開け、何の写真か分かったら「回答する」'}
                   </span>
                 </div>
-                <span className="text-[11px] text-slate-400 whitespace-nowrap shrink-0 hidden sm:inline">
+                <span className="text-[11px] text-zinc-500 whitespace-nowrap shrink-0 hidden sm:inline">
                   ヒント：{currentStage.categoryLabel}
                 </span>
               </div>
             )}
 
             {/* 中央ゲームキャンバス領域 */}
-            <div className="relative w-full flex-1 min-h-0 bg-slate-950 rounded-2xl overflow-hidden border border-white/10 shadow-2xl flex items-center justify-center">
+            <div className="relative w-full flex-1 min-h-0 bg-white rounded-2xl overflow-hidden border border-zinc-200 shadow-xl flex items-center justify-center">
               <canvas
                 ref={canvasRef}
                 width={CANVAS_WIDTH}
@@ -1602,11 +1837,11 @@ export default function App() {
               {(phase === 'READY' ||
                 (phase === 'PLAYING' && ballRef.current.attachedToPaddle)) && (
                 <div className="absolute inset-x-4 bottom-14 pointer-events-none flex flex-col items-center">
-                  <div className="bg-slate-900/90 border border-white/15 rounded-2xl px-4 py-2.5 text-center shadow-2xl pointer-events-auto backdrop-blur-md">
-                    <div className="text-[11px] text-slate-300 font-medium">
-                      カテゴリ：<span className="text-white font-semibold">{currentStage.categoryLabel}</span>
-                      <span className="mx-1.5 text-slate-600">·</span>
-                      <span className="text-amber-300">★枠を割ると周囲も連鎖削り</span>
+                  <div className="bg-white/95 border border-zinc-200 rounded-2xl px-4 py-2.5 text-center shadow-xl pointer-events-auto backdrop-blur-md">
+                    <div className="text-[11px] text-zinc-600 font-medium">
+                      カテゴリ：<span className="text-zinc-900 font-semibold">{currentStage.categoryLabel}</span>
+                      <span className="mx-1.5 text-zinc-300">·</span>
+                      <span className="text-amber-600 font-semibold">★枠を割ると周囲も連鎖削り</span>
                     </div>
                     <button
                       type="button"
@@ -1614,7 +1849,7 @@ export default function App() {
                         launchBallFromPaddle();
                         setPhase('PLAYING');
                       }}
-                      className="mt-1.5 min-h-9 px-5 py-1.5 rounded-xl bg-sky-500 hover:bg-sky-400 text-slate-950 font-bold text-xs shadow transition inline-flex items-center gap-1.5 cursor-pointer whitespace-nowrap"
+                      className="mt-1.5 min-h-9 px-5 py-1.5 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-white font-bold text-xs shadow-sm transition inline-flex items-center gap-1.5 cursor-pointer whitespace-nowrap"
                     >
                       <Play className="w-3.5 h-3.5 fill-current" />
                       <span>ボールを発射</span>
@@ -1625,9 +1860,9 @@ export default function App() {
 
               {/* カウントダウンオーバーレイ */}
               {phase === 'COUNTDOWN' && (
-                <div className="absolute inset-0 bg-slate-950/65 backdrop-blur-sm flex flex-col items-center justify-center z-20">
-                  <div className="text-xs font-medium text-sky-400 mb-1">再開まで</div>
-                  <div className="text-5xl font-extrabold text-white font-mono tabular-nums">
+                <div className="absolute inset-0 bg-white/75 backdrop-blur-sm flex flex-col items-center justify-center z-20">
+                  <div className="text-xs font-semibold text-blue-600 mb-1">再開まで</div>
+                  <div className="text-5xl font-extrabold text-zinc-900 font-mono tabular-nums">
                     {countdownValue}
                   </div>
                 </div>
@@ -1635,10 +1870,10 @@ export default function App() {
 
               {/* 一時停止オーバーレイ */}
               {phase === 'PAUSED' && (
-                <div className="absolute inset-0 bg-slate-950/85 backdrop-blur-sm flex flex-col items-center justify-center p-4 z-20">
-                  <div className="w-full max-w-xs bg-slate-900 border border-white/15 rounded-2xl p-4 text-center space-y-3 shadow-2xl">
-                    <h3 className="text-base font-bold text-white">一時停止</h3>
-                    <p className="text-xs text-slate-400">
+                <div className="absolute inset-0 bg-white/85 backdrop-blur-sm flex flex-col items-center justify-center p-4 z-20">
+                  <div className="w-full max-w-xs bg-white border border-zinc-200 rounded-2xl p-4 text-center space-y-3 shadow-2xl">
+                    <h3 className="text-base font-bold text-zinc-900">一時停止</h3>
+                    <p className="text-xs text-zinc-500">
                       {pauseReason === 'TAB_HIDDEN' && 'タブが非表示になったため一時停止しました。'}
                       {pauseReason === 'WINDOW_BLUR' && 'フォーカスが外れたため一時停止しました。'}
                       {pauseReason === 'ORIENTATION' && '画面の向きが変わったため一時停止しました。'}
@@ -1648,14 +1883,14 @@ export default function App() {
                       <button
                         type="button"
                         onClick={requestResumeFromPause}
-                        className="w-full min-h-10 rounded-xl bg-sky-500 hover:bg-sky-400 text-slate-950 font-bold text-xs transition cursor-pointer"
+                        className="w-full min-h-10 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-white font-bold text-xs transition cursor-pointer shadow-sm"
                       >
                         プレイを再開
                       </button>
                       <button
                         type="button"
                         onClick={() => setPhase('TITLE')}
-                        className="w-full min-h-9 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-medium border border-white/10 transition cursor-pointer"
+                        className="w-full min-h-9 rounded-xl bg-zinc-100 hover:bg-zinc-200 text-zinc-700 text-xs font-medium border border-zinc-200 transition cursor-pointer"
                       >
                         ホームへ戻る
                       </button>
@@ -1690,7 +1925,7 @@ export default function App() {
                   currentStageIndex={currentStageIndex}
                   currentStageRecord={currentStageRecord}
                   onNextStageOrSummary={() => {
-                    if (currentStageIndex + 1 < PUZZLE_STAGES.length) {
+                    if (currentStageIndex + 1 < activeStages.length) {
                       initStage(currentStageIndex + 1, false);
                     } else {
                       setPhase('SUMMARY');
@@ -1720,7 +1955,7 @@ export default function App() {
                     onPointerLeave={() => {
                       buttonHoldRef.current.left = false;
                     }}
-                    className="touch-drag-zone min-w-11 min-h-11 rounded-xl bg-slate-900 hover:bg-slate-800 active:bg-sky-900/60 border border-white/10 text-slate-200 flex items-center justify-center disabled:opacity-40 transition cursor-pointer shrink-0"
+                    className="touch-drag-zone min-w-11 min-h-11 rounded-xl bg-white hover:bg-zinc-100 active:bg-zinc-200 border border-zinc-200 text-zinc-700 flex items-center justify-center disabled:opacity-40 transition cursor-pointer shrink-0 shadow-xs"
                     aria-label="左へ移動"
                   >
                     <ChevronLeft className="w-5 h-5" />
@@ -1740,9 +1975,9 @@ export default function App() {
                       const rect = e.currentTarget.getBoundingClientRect();
                       updatePaddleFromClientX(e.clientX, rect);
                     }}
-                    className="touch-drag-zone flex-1 min-h-11 rounded-xl bg-slate-900/95 border border-white/10 px-3 flex items-center justify-center cursor-ew-resize select-none"
+                    className="touch-drag-zone flex-1 min-h-11 rounded-xl bg-white border border-zinc-200 px-3 flex items-center justify-center cursor-ew-resize select-none shadow-xs"
                   >
-                    <span className="text-xs font-medium text-slate-400 whitespace-nowrap">
+                    <span className="text-xs font-medium text-zinc-500 whitespace-nowrap">
                       ◀ スライドでパドル操作 ▶
                     </span>
                   </div>
@@ -1764,7 +1999,7 @@ export default function App() {
                     onPointerLeave={() => {
                       buttonHoldRef.current.right = false;
                     }}
-                    className="touch-drag-zone min-w-11 min-h-11 rounded-xl bg-slate-900 hover:bg-slate-800 active:bg-sky-900/60 border border-white/10 text-slate-200 flex items-center justify-center disabled:opacity-40 transition cursor-pointer shrink-0"
+                    className="touch-drag-zone min-w-11 min-h-11 rounded-xl bg-white hover:bg-zinc-100 active:bg-zinc-200 border border-zinc-200 text-zinc-700 flex items-center justify-center disabled:opacity-40 transition cursor-pointer shrink-0 shadow-xs"
                     aria-label="右へ移動"
                   >
                     <ChevronRight className="w-5 h-5" />
@@ -1775,15 +2010,15 @@ export default function App() {
                     type="button"
                     disabled={phase !== 'PLAYING' && phase !== 'READY'}
                     onClick={handleOpenAnswerModal}
-                    className={`min-h-11 px-4 sm:px-5 rounded-xl active:scale-[0.99] disabled:opacity-40 text-slate-950 font-bold text-xs sm:text-sm shadow-lg transition flex items-center justify-center gap-2 cursor-pointer whitespace-nowrap shrink-0 ${
+                    className={`min-h-11 px-4 sm:px-5 rounded-xl active:scale-[0.99] disabled:opacity-40 font-bold text-xs sm:text-sm shadow-md transition flex items-center justify-center gap-2 cursor-pointer whitespace-nowrap shrink-0 ${
                       hasCluesRevealed
-                        ? 'bg-emerald-400 hover:bg-emerald-300 shadow-emerald-500/25 ring-2 ring-emerald-300/60'
-                        : 'bg-sky-500 hover:bg-sky-400 shadow-sky-500/20'
+                        ? 'bg-emerald-600 hover:bg-emerald-500 text-white shadow-emerald-600/25 ring-2 ring-emerald-400/40'
+                        : 'bg-zinc-900 hover:bg-zinc-800 text-white shadow-zinc-900/20'
                     }`}
                     title="ショートカット: Enterキーで即座に回答欄を開く"
                   >
                     <span>回答する</span>
-                    <span className="font-mono tabular-nums text-xs bg-slate-950/15 px-1.5 py-0.5 rounded">
+                    <span className="font-mono tabular-nums text-xs bg-white/20 px-1.5 py-0.5 rounded">
                       +{stageMetrics.potentialNormalScore}
                     </span>
                   </button>
