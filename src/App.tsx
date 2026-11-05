@@ -88,43 +88,61 @@ function traceRoundedRect(
 
 function getStagesForCourse(course: CourseMode): PuzzleStage[] {
   if (course === 'HISTORY_HEROES') {
-    // ⚔️ 歴史の偉人・英雄・古代（信長・秀吉・家康・龍馬・西郷・聖徳太子・紫式部・アインシュタイン・ベートーヴェン・ナポレオン等 全15問）
-    const targetIds = [4, 12, 51, 9, 11, 10, 55, 52, 53, 56, 57, 58, 54, 49, 50];
+    // ⚔️ 歴史の偉人・英雄・古代（信長・秀吉・家康・龍馬・西郷・聖徳太子・ニュートン・エジソン・ダヴィンチ等 全30問）
+    const targetIds = [
+      4, 12, 51, 9, 11, 10, 55, 52, 53, 56, 57, 58, 54, 49, 50,
+      131, 132, 133, 134, 135, 136, 137, 138, 139, 140, 141, 142, 143, 144, 145,
+    ];
     return targetIds
       .map((id) => PUZZLE_STAGES.find((st) => st.id === id))
       .filter((st): st is PuzzleStage => Boolean(st));
   }
   if (course === 'WORLD_MASTERPIECES') {
-    // 🎨 世界の傑作名画・至宝（モナリザ・星月夜・最後の晩餐・ひまわり・叫び・真珠の耳飾り・波裏・風神雷神・考える人・ヴィーナス誕生 全11問）
-    const targetIds = [13, 60, 59, 14, 15, 5, 16, 61, 62, 63, 64];
+    // 🎨 世界の傑作名画・至宝（モナリザ・星月夜・最後の晩餐・ひまわり・叫び・波裏・ゲルニカ・睡蓮・接吻等 全21問）
+    const targetIds = [
+      13, 60, 59, 14, 15, 5, 16, 61, 62, 63, 64,
+      146, 147, 148, 149, 150, 151, 152, 153, 154, 155,
+    ];
     return targetIds
       .map((id) => PUZZLE_STAGES.find((st) => st.id === id))
       .filter((st): st is PuzzleStage => Boolean(st));
   }
   if (course === 'RETRO_PIXEL_ART') {
-    // 👾 レトロドット絵＆モダンアート（王冠・盾・コイン・ゴースト・卵・聖剣・ポーション・宇宙船・宝箱・キノコ・ギター・砂時計・地球儀等 全20問）
-    const targetIds = [93, 94, 95, 96, 97, 6, 24, 25, 26, 27, 28, 98, 99, 100, 29, 30, 31, 32, 33, 34];
+    // 👾 道具・アート・科学（王冠・盾・コイン・聖剣・ギター・バイオリン・天体望遠鏡・顕微鏡・そろばん等 全35問）
+    const targetIds = [
+      93, 94, 95, 96, 97, 6, 24, 25, 26, 27, 28, 98, 99, 100, 29, 30, 31, 32, 33, 34,
+      156, 157, 158, 159, 160, 161, 162, 163, 164, 165, 166, 167, 168, 169, 170,
+    ];
     return targetIds
       .map((id) => PUZZLE_STAGES.find((st) => st.id === id))
       .filter((st): st is PuzzleStage => Boolean(st));
   }
   if (course === 'WORLD_HERITAGE') {
-    // 🏛️ 世界遺産＆地球の神秘（万里の長城・タージマハル・サグラダファミリア・マチュピチュ・鳥居・エッフェル塔・金閣寺・ピラミッド・自由の女神等 全16問）
-    const targetIds = [66, 65, 67, 71, 69, 70, 68, 8, 7, 17, 18, 20, 19, 37, 38, 39];
+    // 🏛️ 世界遺産＆地球の名所（姫路城・雷門・金閣寺・万里の長城・ピサの斜塔・スフィンクス・パルテノン・モアイ像等 全35問）
+    const targetIds = [
+      66, 65, 67, 71, 69, 70, 68, 8, 7, 17, 18, 20, 19, 37, 38, 39,
+      101, 102, 103, 104, 105, 106, 107, 108, 116, 117, 118, 119, 120, 121, 122, 123, 124, 125, 126,
+    ];
     return targetIds
       .map((id) => PUZZLE_STAGES.find((st) => st.id === id))
       .filter((st): st is PuzzleStage => Boolean(st));
   }
   if (course === 'SPACE_AND_NATURE' || course === 'SPACE_VEHICLES') {
-    // 🌌 宇宙・大自然・動物（地球・月・木星・土星・太陽・キリン・ゾウ・コアラ・イルカ・トラ・シマウマ・カメレオン・パンダ・ライオン・ペンギン 全16問）
-    const targetIds = [79, 36, 80, 35, 82, 81, 72, 73, 74, 75, 76, 78, 77, 21, 22, 23];
+    // 🌌 宇宙・大自然・動物（地球・月・木星・土星・太陽・クジラ・恐竜・カブトムシ・キリン・ゾウ等 全35問）
+    const targetIds = [
+      79, 36, 80, 35, 82, 81, 72, 73, 74, 75, 76, 78, 77, 21, 22, 23,
+      186, 187, 188, 189, 190, 191, 192, 193, 194, 195, 196, 171, 172, 173, 174, 175, 176, 177, 178,
+    ];
     return targetIds
       .map((id) => PUZZLE_STAGES.find((st) => st.id === id))
       .filter((st): st is PuzzleStage => Boolean(st));
   }
   if (course === 'VEHICLES_AND_FOODS' || course === 'FOODS_AND_LIFE') {
-    // 🍔 乗り物＆おいしいグルメ（新幹線・飛行機・パトカー・ロケット・ラーメン・カレー・バーガー・寿司・ピザ・ケーキ等 全18問）
-    const targetIds = [40, 41, 83, 87, 84, 85, 86, 42, 43, 89, 90, 88, 46, 45, 47, 44, 91, 92];
+    // 🍔 乗り物＆おいしいグルメ（新幹線・飛行機・パトカー・ロケット・ゴンドラ・ラーメン・カレー・寿司・ピザ等 全24問）
+    const targetIds = [
+      40, 41, 83, 87, 84, 85, 86, 42, 43, 89, 90, 88, 46, 45, 47, 44, 91, 92,
+      129, 111, 112, 113, 114, 115,
+    ];
     return targetIds
       .map((id) => PUZZLE_STAGES.find((st) => st.id === id))
       .filter((st): st is PuzzleStage => Boolean(st));
@@ -140,7 +158,7 @@ function getStagesForCourse(course: CourseMode): PuzzleStage[] {
     const shuffled = [...PUZZLE_STAGES].sort(() => Math.random() - 0.5);
     return shuffled.slice(0, 3);
   }
-  // デフォルト: RANDOM_5（全100問からランダムに5問シャッフル選出）
+  // デフォルト: RANDOM_5（全200問からランダムに5問シャッフル選出）
   const shuffled = [...PUZZLE_STAGES].sort(() => Math.random() - 0.5);
   return shuffled.slice(0, 5);
 }
@@ -602,6 +620,25 @@ export default function App() {
     },
     [initStage, selectedCourse]
   );
+
+  // URLパラメータ（?stage=101等）による特定ステージ直接検証サポート（初回マウント時1回のみ実行）
+  const initialUrlStageParsedRef = useRef<boolean>(false);
+  useEffect(() => {
+    if (initialUrlStageParsedRef.current) return;
+    initialUrlStageParsedRef.current = true;
+    const params = new URLSearchParams(window.location.search);
+    const stageParam = params.get('stage');
+    if (stageParam) {
+      const sId = parseInt(stageParam, 10);
+      const targetStage = PUZZLE_STAGES.find((s) => s.id === sId);
+      if (targetStage) {
+        setActiveStages([targetStage]);
+        activeStagesRef.current = [targetStage];
+        setStageRecords({});
+        initStage(0, false, [targetStage]);
+      }
+    }
+  }, [initStage]);
 
   const transitionToLastChance = useCallback(
     (reason: 'ALL_TILES_CLEARED' | 'OUT_OF_LIVES' | 'TIME_UP') => {

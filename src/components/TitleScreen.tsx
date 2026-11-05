@@ -315,7 +315,7 @@ export const TitleScreen: React.FC<TitleScreenProps> = ({
       <div className="flex-1 min-h-0 overflow-y-auto py-1.5 pr-1 space-y-1.5 custom-scrollbar">
         <div className="flex items-center justify-between px-1">
           <span className="font-display text-[11px] font-bold text-zinc-500 uppercase tracking-wider">
-            コース選択（全9コース・100問）
+            コース選択（全9コース・全200ステージ）
           </span>
           <span className="text-[10px] text-zinc-400">
             スクロールして選択

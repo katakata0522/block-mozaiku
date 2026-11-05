@@ -1,3 +1,6 @@
+import { STAGES_101_TO_200 } from './stages101to200';
+import { renderStage101To200Artwork } from './stages101to200Artwork';
+
 export interface PuzzleStage {
   id: number;
   title: string;
@@ -3384,6 +3387,7 @@ export const PUZZLE_STAGES: PuzzleStage[] = [
       verificationDate: "2026-11-05",
     },
   },
+  ...STAGES_101_TO_200,
 ];
 
 // 実写写真のプリロードキャッシュ
@@ -3544,6 +3548,12 @@ export function renderStageArtworkToCanvas(
 ): void {
   ctx.save();
   ctx.clearRect(0, 0, width, height);
+
+  if (stageId >= 101 && stageId <= 200) {
+    renderStage101To200Artwork(ctx, stageId, width, height);
+    ctx.restore();
+    return;
+  }
 
   const loadedImg = LOADED_STAGE_IMAGES.get(stageId);
   if (loadedImg && loadedImg.complete && loadedImg.naturalWidth > 0) {
