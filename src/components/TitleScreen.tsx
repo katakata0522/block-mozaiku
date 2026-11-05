@@ -236,26 +236,22 @@ export const TitleScreen: React.FC<TitleScreenProps> = ({
   };
 
   return (
-    <div className="w-full h-full flex flex-col bg-white border border-zinc-200/90 rounded-3xl p-3 sm:p-5 shadow-xl backdrop-blur-md overflow-hidden text-zinc-900">
-      {/* 洗練されたブランドヘッダー（重複排除・コンテンツ最優先） */}
+    <div className="w-full h-full flex flex-col bg-[#f6f5f1] border-2 border-zinc-300/90 rounded-[26px] p-3 sm:p-5 shadow-[0_12px_32px_rgba(24,24,27,0.14),inset_0_1.5px_0_#ffffff] overflow-hidden text-zinc-900">
+      {/* 洗練されたブランドヘッダー */}
       <div className="text-center shrink-0 pb-1 pt-0.5">
         <div className="flex items-center justify-center gap-2 mb-0.5">
           <BrandLogo size={22} />
-          <h1 className="text-lg sm:text-xl font-extrabold text-zinc-900 tracking-tight">
+          <h1 className="text-lg sm:text-xl font-black text-zinc-900 tracking-tight">
             モザイクブレイク
           </h1>
-          <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-amber-700 bg-amber-50 border border-amber-200/80 px-2 py-0.5 rounded-full">
-            <Sparkles className="w-2.5 h-2.5 text-amber-600 fill-amber-500" />
-            <span>全100問</span>
-          </span>
         </div>
-        <p className="text-[11px] text-zinc-500 max-w-sm mx-auto leading-normal text-balance">
-          壊すほど写真が露出。ひらめいた瞬間に答えて最速タイムを目指そう！
+        <p className="text-[11px] text-zinc-600 font-medium max-w-sm mx-auto leading-normal text-balance">
+          壊すほど写真が露出。ひらめいた瞬間に早押しして最速タイムを目指そう！
         </p>
       </div>
 
-      {/* 3回で割れるモザイク変化（100%→70%→40%→0%）のインタラクティブ・ショーケース */}
-      <div className="py-1 flex flex-col items-center shrink-0 border-y border-zinc-100 my-1">
+      {/* 3回で割れるモザイク変化（100%→70%→40%→0%）のアーケードベゼル・ショーケース */}
+      <div className="py-1.5 flex flex-col items-center shrink-0 border-y border-zinc-200/80 my-1">
         <div
           onClick={handleAdvanceDemo}
           role="button"
@@ -266,33 +262,35 @@ export const TitleScreen: React.FC<TitleScreenProps> = ({
               handleAdvanceDemo();
             }
           }}
-          className="relative w-full max-w-[240px] sm:max-w-[280px] aspect-[20/9] sm:aspect-[16/9] rounded-xl overflow-hidden border border-zinc-200 shadow-sm cursor-pointer group select-none transition hover:shadow-md"
+          className="relative w-full max-w-[250px] sm:max-w-[290px] p-1 bg-zinc-900 rounded-2xl border border-zinc-800 shadow-lg cursor-pointer group select-none transition hover:scale-[1.01]"
           title="タップでモザイクの3段階露出（100%→70%→40%→0%クリア枠）を体験"
         >
-          <canvas
-            ref={demoCanvasRef}
-            width={400}
-            height={225}
-            className="w-full h-full object-cover block"
-          />
+          <div className="relative aspect-[20/9] sm:aspect-[16/9] rounded-xl overflow-hidden bg-zinc-950">
+            <canvas
+              ref={demoCanvasRef}
+              width={400}
+              height={225}
+              className="w-full h-full object-cover block"
+            />
 
-          {/* デモステータスバー */}
-          <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-zinc-950/90 via-zinc-950/60 to-transparent px-2.5 py-1.5 flex items-center justify-between">
-            <div className="flex items-center gap-1.5 text-white">
-              <span className="font-display font-bold text-sky-300 tabular-nums text-[11px]">
-                {currentDemo.label}
+            {/* デモステータスバー */}
+            <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-zinc-950/95 via-zinc-950/65 to-transparent px-2.5 py-1.5 flex items-center justify-between">
+              <div className="flex items-center gap-1.5 text-white">
+                <span className="font-display font-black text-amber-300 tabular-nums text-[11px]">
+                  {currentDemo.label}
+                </span>
+                <span aria-hidden="true" className="text-zinc-500 text-xs">·</span>
+                <span className="text-[10px] text-zinc-200 font-medium truncate">{currentDemo.hitsText}</span>
+              </div>
+              <span className="text-[9px] text-white font-bold bg-white/20 backdrop-blur-xs px-1.5 py-0.5 rounded shrink-0">
+                TAP
               </span>
-              <span aria-hidden="true" className="text-zinc-400 text-xs">·</span>
-              <span className="text-[10px] text-zinc-200 truncate">{currentDemo.hitsText}</span>
             </div>
-            <span className="text-[9px] text-white font-medium bg-white/20 backdrop-blur-xs px-1.5 py-0.5 rounded shrink-0">
-              タップで切替
-            </span>
           </div>
         </div>
 
         {/* ステップ進行インジケーター */}
-        <div className="mt-1.5 flex items-center gap-1 p-0.5 bg-zinc-100 border border-zinc-200/80 rounded-lg">
+        <div className="mt-1.5 flex items-center gap-1 p-0.5 bg-zinc-200/70 border border-zinc-300/70 rounded-lg">
           {DEMO_MOSAIC_STEPS.map((step, idx) => (
             <button
               key={step.percent}
@@ -301,10 +299,10 @@ export const TitleScreen: React.FC<TitleScreenProps> = ({
                 setDemoStepIndex(idx);
                 soundEngine.playBounce(true);
               }}
-              className={`min-h-6 px-2 py-0.5 rounded-md text-[10px] font-display font-bold tabular-nums transition cursor-pointer whitespace-nowrap ${
+              className={`min-h-6 px-2 py-0.5 rounded-md text-[10px] font-display font-extrabold tabular-nums transition cursor-pointer whitespace-nowrap ${
                 demoStepIndex === idx
-                  ? 'bg-white text-zinc-900 shadow-xs border border-zinc-200'
-                  : 'text-zinc-500 hover:text-zinc-800'
+                  ? 'bg-zinc-900 text-amber-300 shadow-xs'
+                  : 'text-zinc-600 hover:text-zinc-900'
               }`}
             >
               {step.percent === 0 ? '0% CLEAR' : `${step.percent}%`}
@@ -375,16 +373,16 @@ export const TitleScreen: React.FC<TitleScreenProps> = ({
         </div>
       </div>
 
-      {/* モード切替 ＆ スタートボタン（下部固定） */}
-      <div className="pt-2 border-t border-zinc-100 space-y-1.5 shrink-0">
-        <div className="grid grid-cols-2 gap-1 p-0.5 bg-zinc-100 border border-zinc-200/80 rounded-xl">
+      {/* モード切替 ＆ 立体アーケードスタートボタン（下部固定） */}
+      <div className="pt-2 border-t border-zinc-200/80 space-y-2 shrink-0 pb-0.5">
+        <div className="grid grid-cols-2 gap-1 p-0.5 bg-zinc-200/75 border border-zinc-300/80 rounded-xl">
           <button
             type="button"
             onClick={() => setIsPracticeMode(false)}
             className={`min-h-7 py-1 px-2 rounded-lg text-[11px] font-semibold transition cursor-pointer whitespace-nowrap ${
               !isPracticeMode
-                ? 'bg-white text-zinc-900 shadow-xs border border-zinc-200 font-bold'
-                : 'text-zinc-500 hover:text-zinc-800'
+                ? 'bg-white text-zinc-900 shadow-xs border border-zinc-200 font-extrabold'
+                : 'text-zinc-600 hover:text-zinc-900'
             }`}
           >
             ⏱️ タイムアタック（最速クリア）
@@ -394,8 +392,8 @@ export const TitleScreen: React.FC<TitleScreenProps> = ({
             onClick={() => setIsPracticeMode(true)}
             className={`min-h-7 py-1 px-2 rounded-lg text-[11px] font-semibold transition cursor-pointer whitespace-nowrap ${
               isPracticeMode
-                ? 'bg-white text-zinc-900 shadow-xs border border-zinc-200 font-bold'
-                : 'text-zinc-500 hover:text-zinc-800'
+                ? 'bg-white text-zinc-900 shadow-xs border border-zinc-200 font-extrabold'
+                : 'text-zinc-600 hover:text-zinc-900'
             }`}
           >
             ☕ フリープレイ（練習モード）
@@ -405,11 +403,11 @@ export const TitleScreen: React.FC<TitleScreenProps> = ({
         <button
           type="button"
           onClick={onStartGame}
-          className="w-full min-h-12 py-2.5 rounded-2xl bg-zinc-900 hover:bg-zinc-800 active:scale-[0.99] text-white font-bold text-sm sm:text-base shadow-md transition flex items-center justify-center gap-2 cursor-pointer keycap-btn"
+          className="w-full min-h-12 py-2.5 rounded-2xl bg-gradient-to-b from-zinc-800 to-zinc-950 hover:from-zinc-750 hover:to-zinc-900 text-white font-black text-sm sm:text-base flex items-center justify-center gap-2 cursor-pointer keycap-dark"
         >
-          <Play className="w-4 h-4 fill-current" />
+          <Play className="w-4 h-4 fill-amber-400 text-amber-400" />
           <span>ゲームスタート</span>
-          <span className="text-[11px] font-normal text-zinc-400 font-display hidden sm:inline">[Space]</span>
+          <span className="text-[11px] font-semibold text-zinc-400 font-display hidden sm:inline">[Space]</span>
         </button>
       </div>
     </div>

@@ -17,6 +17,8 @@ import {
   Home,
   CheckCircle2,
   Timer,
+  Zap,
+  Trophy,
 } from 'lucide-react';
 import {
   PUZZLE_STAGES,
@@ -144,9 +146,10 @@ function getStagesForCourse(course: CourseMode): PuzzleStage[] {
 }
 
 function formatStopwatch(totalSec: number): string {
-  const mins = Math.floor(totalSec / 60);
-  const secs = Math.floor(totalSec % 60);
-  const tenths = Math.floor((totalSec % 1) * 10);
+  const totalTenths = Math.round(Math.max(0, totalSec) * 10);
+  const mins = Math.floor(totalTenths / 600);
+  const secs = Math.floor((totalTenths % 600) / 10);
+  const tenths = totalTenths % 10;
   if (mins > 0) {
     return `${mins}:${secs.toString().padStart(2, '0')}.${tenths}`;
   }
@@ -212,6 +215,8 @@ export default function App() {
   const [inputKana, setInputKana] = useState<string>('');
   const [currentChoices, setCurrentChoices] = useState<string[]>([]);
   const [wrongPenaltyBanner, setWrongPenaltyBanner] = useState<string | null>(null);
+  const [penaltyShakeKey, setPenaltyShakeKey] = useState<number>(0);
+  const penaltyBannerTimerRef = useRef<number | null>(null);
   const [answerInput, setAnswerInput] = useState<string>('');
   const [answerFeedback, setAnswerFeedback] = useState<{
     type: 'EMPTY' | 'WRONG' | null;
@@ -221,6 +226,8 @@ export default function App() {
     'ALL_TILES_CLEARED' | 'OUT_OF_LIVES' | 'TIME_UP'
   >('ALL_TILES_CLEARED');
   const [currentStageRecord, setCurrentStageRecord] = useState<StageScoreRecord | null>(null);
+  const currentStageRecordRef = useRef<StageScoreRecord | null>(null);
+  currentStageRecordRef.current = currentStageRecord;
   const [stageRecords, setStageRecords] = useState<Record<number, StageScoreRecord>>({});
 
   // --- 物理・4段階（3回ヒット制: 100% -> 70% -> 40% -> 0%クリア枠）Canvas用Ref ---
@@ -258,6 +265,9 @@ export default function App() {
   const particlesRef = useRef<HitParticle[]>([]);
   const floatingFeedbacksRef = useRef<FloatingFeedback[]>([]);
   const comboRef = useRef<number>(0);
+  const ballTrailRef = useRef<Array<{ x: number; y: number }>>([]);
+  const paddleRecoilRef = useRef<number>(0);
+  const sliceBoostTimerRef = useRef<number>(0);
 
   // 画面揺れ（スクリーンシェイク）Ref: 残り時間、振幅、X/Yオフセット
   const screenShakeRef = useRef<{
@@ -472,6 +482,9 @@ export default function App() {
   const resetBallOnPaddle = useCallback(() => {
     const paddleCenter = paddleXRef.current + PADDLE_WIDTH / 2;
     comboRef.current = 0;
+    ballTrailRef.current = [];
+    sliceBoostTimerRef.current = 0;
+    paddleRecoilRef.current = 0;
     ballRef.current = {
       x: paddleCenter,
       y: PADDLE_Y - BALL_RADIUS - 2,
@@ -546,6 +559,7 @@ export default function App() {
       setStageMetrics(calculateStageMetrics(initialTiles, 0));
       setAnswerInput('');
       setAnswerFeedback({ type: null, message: '' });
+      setWrongPenaltyBanner(null);
       setCurrentStageRecord(null);
       setStageIntroBanner(`STAGE ${stageIdx + 1}`);
       setTimeout(() => {
@@ -594,10 +608,15 @@ export default function App() {
       clearAllMovementInputs();
       ballRef.current.vx = 0;
       ballRef.current.vy = 0;
+      ballTrailRef.current = [];
       setStageMetrics(calculateStageMetrics(tilesRef.current, elapsedMsRef.current));
       setLastChanceReason(reason);
       setAnswerInput('');
       setAnswerFeedback({ type: null, message: '' });
+      const st = activeStagesRef.current[currentStageIndexRef.current] || PUZZLE_STAGES[0];
+      const canonical = getStageCanonicalKana(st);
+      setInputKana('');
+      setCurrentChoices(generateMinhayaChoices(canonical, 0, st.kanaPad));
       setPhase('LAST_CHANCE');
       soundEngine.playAnswerOpen();
     },
@@ -655,6 +674,31 @@ export default function App() {
           }
           return { ...prev, [stage.id]: record };
         });
+      }
+
+      // ステージ正解クリア時は祝祭の紙吹雪コンフェッティ＆ライトフラッシュ演出を発動！
+      if (isCleared) {
+        flashAlphaRef.current = 0.35;
+        const confettiPalette = ['#fbbf24', '#10b981', '#38bdf8', '#f43f5e', '#f59e0b'];
+        for (let i = 0; i < 38; i++) {
+          const angle = -Math.PI / 2 + (Math.random() - 0.5) * 2.1;
+          const speed = 130 + Math.random() * 210;
+          particlesRef.current.push({
+            x: CANVAS_WIDTH * (0.18 + Math.random() * 0.64),
+            y: TILE_AREA_HEIGHT * (0.25 + Math.random() * 0.5),
+            vx: Math.cos(angle) * speed,
+            vy: Math.sin(angle) * speed - 60,
+            color: confettiPalette[i % confettiPalette.length],
+            alpha: 1,
+            size: 4.2 + Math.random() * 2.4,
+            isSquare: true,
+            gravity: 240,
+            rotation: Math.random() * Math.PI * 2,
+            vRot: (Math.random() - 0.5) * 11,
+            aspectRatio: 0.55,
+            decayRate: 0.72,
+          });
+        }
       }
 
       setPhase('STAGE_RESULT');
@@ -783,13 +827,21 @@ export default function App() {
       // 誤答文字タップ！案A：即座に+5秒加算 ＆ ブロック崩しへ強制復帰！
       soundEngine.playMiss();
       elapsedMsRef.current += 5000;
+      setStageMetrics(calculateStageMetrics(tilesRef.current, elapsedMsRef.current));
       if (elapsedTimerSpanRef.current) {
         const currentTotalSec = totalCourseElapsedSecRef.current + (elapsedMsRef.current / 1000);
         elapsedTimerSpanRef.current.textContent = formatStopwatch(currentTotalSec);
       }
 
-      setWrongPenaltyBanner(`❌ 不正解！（タイム+5.0秒加算）`);
-      window.setTimeout(() => setWrongPenaltyBanner(null), 2200);
+      setPenaltyShakeKey((prev) => prev + 1);
+      triggerScreenShake(7, 220);
+      setWrongPenaltyBanner('不正解！ タイム +5.0s');
+      if (penaltyBannerTimerRef.current) {
+        window.clearTimeout(penaltyBannerTimerRef.current);
+      }
+      penaltyBannerTimerRef.current = window.setTimeout(() => {
+        setWrongPenaltyBanner(null);
+      }, 2200);
 
       setInputKana('');
       setCurrentChoices([]);
@@ -904,46 +956,254 @@ export default function App() {
     ctx.save();
     ctx.clearRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
 
-    // ★コアタイル破壊時の「面白い程度の画面揺れ」を全体座標に適用
+    // ★コアタイル破壊時やペナルティ時のスクリーンシェイク適用
     if (screenShakeRef.current.shakeX !== 0 || screenShakeRef.current.shakeY !== 0) {
       ctx.translate(screenShakeRef.current.shakeX, screenShakeRef.current.shakeY);
     }
 
-    // 1. アリーナ全体のクリーンな背景 ＋ 精密ウォール境界
-    const arenaGrad = ctx.createLinearGradient(0, 0, 0, CANVAS_HEIGHT);
-    arenaGrad.addColorStop(0, '#f8fafc');
-    arenaGrad.addColorStop(0.5, '#ffffff');
-    arenaGrad.addColorStop(1, '#f8fafc');
-    ctx.fillStyle = arenaGrad;
-    ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
-
-    // 精密ウォール境界線
-    ctx.strokeStyle = 'rgba(226, 232, 240, 0.7)';
-    ctx.lineWidth = 1;
-    ctx.strokeRect(0.5, 0.5, CANVAS_WIDTH - 1, CANVAS_HEIGHT - 1);
-
-    // 2. 写真領域の下地（0%原画）描画
-    if (offscreenArtworkRef.current) {
-      ctx.imageSmoothingEnabled = true;
-      ctx.drawImage(
-        offscreenArtworkRef.current,
-        0,
-        0,
-        TILE_AREA_WIDTH,
-        TILE_AREA_HEIGHT,
-        TILE_AREA_LEFT,
-        TILE_AREA_TOP,
-        TILE_AREA_WIDTH,
-        TILE_AREA_HEIGHT
-      );
-    }
-
     const isFullRevealPhase = phaseRef.current === 'STAGE_RESULT';
+    const now = performance.now();
 
-    // 3. 各ゾーンのモザイク（100% / 70% / 40%）と、0%クリア済み枠の描画
-    if (!isFullRevealPhase) {
-      const now = performance.now();
+    if (isFullRevealPhase) {
+      // ====================================================================
+      // ★ STAGE_RESULT 専用：ミュージアム・額装ギャラリー＆クリア刻印ショーケース
+      // （従来の「下半分が真っ白な余白」を根絶し、名画の額装展示＋鑑定プレートへ昇華！）
+      // ====================================================================
+      const bgGrad = ctx.createLinearGradient(0, 0, 0, CANVAS_HEIGHT);
+      bgGrad.addColorStop(0, '#1c1917');
+      bgGrad.addColorStop(0.55, '#27272a');
+      bgGrad.addColorStop(1, '#18181b');
+      ctx.fillStyle = bgGrad;
+      ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
 
+      // ギャラリー外周の繊細なゴールドトリム
+      ctx.strokeStyle = 'rgba(245, 158, 11, 0.28)';
+      ctx.lineWidth = 1.5;
+      traceRoundedRect(ctx, 12, 12, CANVAS_WIDTH - 24, CANVAS_HEIGHT - 24, 14);
+      ctx.stroke();
+
+      // 1. 額装マット台紙（アイボリーマット＋立体ドロップシャドウ）
+      const frameX = 24;
+      const frameY = 26;
+      const frameW = CANVAS_WIDTH - 48; // 552
+      const frameH = 304;
+      const matPad = 10;
+
+      ctx.save();
+      ctx.shadowColor = 'rgba(0, 0, 0, 0.55)';
+      ctx.shadowBlur = 24;
+      ctx.shadowOffsetY = 10;
+      ctx.fillStyle = '#f5f4ef';
+      traceRoundedRect(ctx, frameX, frameY, frameW, frameH, 10);
+      ctx.fill();
+      ctx.restore();
+
+      // マット外縁のブラスゴールド細枠
+      ctx.strokeStyle = '#d97706';
+      ctx.lineWidth = 2;
+      traceRoundedRect(ctx, frameX, frameY, frameW, frameH, 10);
+      ctx.stroke();
+
+      // 原画の描画（額装内いっぱいに高精細描画）
+      const artX = frameX + matPad;
+      const artY = frameY + matPad;
+      const artW = frameW - matPad * 2;
+      const artH = frameH - matPad * 2;
+      if (offscreenArtworkRef.current) {
+        ctx.save();
+        traceRoundedRect(ctx, artX, artY, artW, artH, 5);
+        ctx.clip();
+        ctx.imageSmoothingEnabled = true;
+        ctx.drawImage(
+          offscreenArtworkRef.current,
+          0,
+          0,
+          TILE_AREA_WIDTH,
+          TILE_AREA_HEIGHT,
+          artX,
+          artY,
+          artW,
+          artH
+        );
+        ctx.restore();
+
+        // 絵画内側のインセットシャドウ縁
+        ctx.strokeStyle = 'rgba(24, 24, 27, 0.22)';
+        ctx.lineWidth = 1;
+        traceRoundedRect(ctx, artX, artY, artW, artH, 5);
+        ctx.stroke();
+      }
+
+      // 2. 下部ギャラリー鑑定銘板 ＆ クリアランクエンブレム（y: 350..612）
+      const rec = currentStageRecordRef.current;
+      const st = activeStagesRef.current[currentStageIndexRef.current] || PUZZLE_STAGES[0];
+      const isSolved =
+        rec &&
+        (rec.resolutionType === 'NORMAL_CORRECT' || rec.resolutionType === 'LAST_CHANCE_CORRECT');
+
+      // 鑑定プレート台座
+      const plaqueX = 36;
+      const plaqueY = 354;
+      const plaqueW = CANVAS_WIDTH - 72;
+      const plaqueH = 250;
+
+      const pBg = ctx.createLinearGradient(0, plaqueY, 0, plaqueY + plaqueH);
+      pBg.addColorStop(0, 'rgba(39, 39, 42, 0.92)');
+      pBg.addColorStop(1, 'rgba(24, 24, 27, 0.96)');
+      ctx.fillStyle = pBg;
+      traceRoundedRect(ctx, plaqueX, plaqueY, plaqueW, plaqueH, 16);
+      ctx.fill();
+
+      ctx.strokeStyle = isSolved ? 'rgba(251, 191, 36, 0.45)' : 'rgba(148, 163, 184, 0.3)';
+      ctx.lineWidth = 1.5;
+      traceRoundedRect(ctx, plaqueX, plaqueY, plaqueW, plaqueH, 16);
+      ctx.stroke();
+
+      // 四隅の真鍮リベット装飾
+      const rivets = [
+        [plaqueX + 12, plaqueY + 12],
+        [plaqueX + plaqueW - 12, plaqueY + 12],
+        [plaqueX + 12, plaqueY + plaqueH - 12],
+        [plaqueX + plaqueW - 12, plaqueY + plaqueH - 12],
+      ];
+      ctx.fillStyle = isSolved ? '#f59e0b' : '#64748b';
+      for (const [rx, ry] of rivets) {
+        ctx.beginPath();
+        ctx.arc(rx, ry, 2.5, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      ctx.save();
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+
+      // ステータスヘッダーピル
+      const pillW = 210;
+      const pillH = 28;
+      const pillX = CANVAS_WIDTH / 2 - pillW / 2;
+      const pillY = plaqueY + 22;
+      if (isSolved) {
+        const badgeGrad = ctx.createLinearGradient(pillX, pillY, pillX + pillW, pillY + pillH);
+        if (rec?.speedRank === 'S') {
+          badgeGrad.addColorStop(0, '#f59e0b');
+          badgeGrad.addColorStop(0.5, '#fde047');
+          badgeGrad.addColorStop(1, '#d97706');
+        } else {
+          badgeGrad.addColorStop(0, '#10b981');
+          badgeGrad.addColorStop(1, '#059669');
+        }
+        ctx.fillStyle = badgeGrad;
+        traceRoundedRect(ctx, pillX, pillY, pillW, pillH, 14);
+        ctx.fill();
+
+        ctx.font = '900 13px "Plus Jakarta Sans", system-ui, sans-serif';
+        ctx.fillStyle = rec?.speedRank === 'S' ? '#451a03' : '#ffffff';
+        ctx.fillText(
+          rec?.speedRank === 'S' ? '★ PERFECT CLEAR · RANK S ★' : `STAGE CLEAR · RANK ${rec?.speedRank}`,
+          CANVAS_WIDTH / 2,
+          pillY + pillH / 2 + 0.5
+        );
+      } else {
+        ctx.fillStyle = 'rgba(71, 85, 105, 0.55)';
+        traceRoundedRect(ctx, pillX, pillY, pillW, pillH, 14);
+        ctx.fill();
+        ctx.font = '700 12px "Plus Jakarta Sans", system-ui, sans-serif';
+        ctx.fillStyle = '#cbd5e1';
+        ctx.fillText('ARCHIVE REVEALED', CANVAS_WIDTH / 2, pillY + pillH / 2 + 0.5);
+      }
+
+      // カテゴリラベル
+      const cleanCat = st.categoryLabel.replace(/[（(][^）)]*[）)]/g, '').trim();
+      ctx.font = '600 13px "Noto Sans JP", sans-serif';
+      ctx.fillStyle = '#a1a1aa';
+      ctx.fillText(cleanCat, CANVAS_WIDTH / 2, plaqueY + 76);
+
+      // メイン作品名・正解タイトル（主役）
+      const answerMatch = st.displayAnswer.match(/^([^(（]+)([（(][^）)]+[）)])?$/);
+      const mainTitle = answerMatch ? answerMatch[1].trim() : st.displayAnswer;
+      const subReading = answerMatch && answerMatch[2] ? answerMatch[2].trim() : '';
+
+      ctx.font = '900 30px "Plus Jakarta Sans", "Noto Sans JP", sans-serif';
+      ctx.fillStyle = '#ffffff';
+      ctx.fillText(mainTitle, CANVAS_WIDTH / 2, plaqueY + 118, plaqueW - 44);
+
+      if (subReading) {
+        ctx.font = '600 15px "Noto Sans JP", sans-serif';
+        ctx.fillStyle = '#fbbf24';
+        ctx.fillText(subReading, CANVAS_WIDTH / 2, plaqueY + 152, plaqueW - 44);
+      }
+
+      // 区切り装飾ライン
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.1)';
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(plaqueX + 48, plaqueY + 180);
+      ctx.lineTo(plaqueX + plaqueW - 48, plaqueY + 180);
+      ctx.stroke();
+
+      // タイム＆獲得スコア刻印
+      if (rec) {
+        ctx.font = '800 16px "Plus Jakarta Sans", monospace';
+        ctx.fillStyle = '#e4e4e7';
+        const statText = isSolved
+          ? `TIME  ${rec.elapsedSec.toFixed(1)}s     ·     SCORE  +${rec.score} pt`
+          : `TIME  ${rec.elapsedSec.toFixed(1)}s     ·     SCORE  0 pt`;
+        ctx.fillText(statText, CANVAS_WIDTH / 2, plaqueY + 212);
+      }
+      ctx.restore();
+    } else {
+      // ====================================================================
+      // ★ 通常プレイ空間：上質なマットストーン盤面 ＆ 立体モザイクガラス ＆ 精密自機
+      // ====================================================================
+      const arenaGrad = ctx.createLinearGradient(0, TILE_AREA_HEIGHT, 0, CANVAS_HEIGHT);
+      arenaGrad.addColorStop(0, '#eeece6');
+      arenaGrad.addColorStop(0.35, '#f6f5f0');
+      arenaGrad.addColorStop(1, '#eae7df');
+      ctx.fillStyle = arenaGrad;
+      ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+
+      // プレイコートの幾何学計器マーキング（ピンボール/アーケード盤面の品格）
+      ctx.save();
+      ctx.strokeStyle = 'rgba(120, 113, 108, 0.13)';
+      ctx.lineWidth = 1.2;
+      // センターサークルアーク
+      ctx.beginPath();
+      ctx.arc(CANVAS_WIDTH / 2, PADDLE_Y + 8, 150, Math.PI * 1.12, Math.PI * 1.88);
+      ctx.stroke();
+      ctx.setLineDash([4, 6]);
+      ctx.beginPath();
+      ctx.arc(CANVAS_WIDTH / 2, PADDLE_Y + 8, 95, Math.PI * 1.15, Math.PI * 1.85);
+      ctx.stroke();
+      ctx.setLineDash([]);
+
+      // 左右のサイドバンパーガイドライン（壁の反射面が直感的に視認できる）
+      ctx.strokeStyle = 'rgba(120, 113, 108, 0.22)';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(4, TILE_AREA_HEIGHT + 6);
+      ctx.lineTo(4, CANVAS_HEIGHT - 16);
+      ctx.moveTo(CANVAS_WIDTH - 4, TILE_AREA_HEIGHT + 6);
+      ctx.lineTo(CANVAS_WIDTH - 4, CANVAS_HEIGHT - 16);
+      ctx.stroke();
+      ctx.restore();
+
+      // 2. 写真領域の下地（0%原画）描画
+      if (offscreenArtworkRef.current) {
+        ctx.imageSmoothingEnabled = true;
+        ctx.drawImage(
+          offscreenArtworkRef.current,
+          0,
+          0,
+          TILE_AREA_WIDTH,
+          TILE_AREA_HEIGHT,
+          TILE_AREA_LEFT,
+          TILE_AREA_TOP,
+          TILE_AREA_WIDTH,
+          TILE_AREA_HEIGHT
+        );
+      }
+
+      // 3. 各ゾーンのモザイク（100% / 70% / 40%）＋ 立体ガラスベベル ＋ ダメージひび割れクラック
       for (const tile of tilesRef.current) {
         if (tile.hp <= 0) continue;
 
@@ -958,58 +1218,109 @@ export default function App() {
 
         const sx = tile.x - TILE_AREA_LEFT;
         const sy = tile.y - TILE_AREA_TOP;
+        const tx = tile.x;
+        const ty = tile.y;
+        const tw = tile.width;
+        const th = tile.height;
 
         if (mosaicLayer) {
           ctx.imageSmoothingEnabled = false;
-          ctx.drawImage(
-            mosaicLayer,
-            sx,
-            sy,
-            tile.width,
-            tile.height,
-            tile.x,
-            tile.y,
-            tile.width,
-            tile.height
-          );
+          ctx.drawImage(mosaicLayer, sx, sy, tw, th, tx, ty, tw, th);
         }
 
-        // 各タイルの繊細なグリッド仕切り線
-        ctx.strokeStyle = 'rgba(255, 255, 255, 0.45)';
-        ctx.lineWidth = 1;
-        ctx.strokeRect(tile.x, tile.y, tile.width, tile.height);
+        // 立体ガラス・セラミックタイルのベベル（上・左ハイライト、下・右シェード）
+        ctx.lineWidth = 1.5;
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.58)';
+        ctx.beginPath();
+        ctx.moveTo(tx + 0.75, ty + th - 0.75);
+        ctx.lineTo(tx + 0.75, ty + 0.75);
+        ctx.lineTo(tx + tw - 0.75, ty + 0.75);
+        ctx.stroke();
 
-        // コアゾーン（周囲を削るボーナス枠）：写真の邪魔をしない洗練されたゴールドブラケット
-        if (tile.isCoreZone) {
-          ctx.strokeStyle = 'rgba(245, 158, 11, 0.7)';
-          ctx.lineWidth = 1.2;
-          const bLen = 6;
-          const x1 = tile.x + 2;
-          const y1 = tile.y + 2;
-          const x2 = tile.x + tile.width - 2;
-          const y2 = tile.y + tile.height - 2;
+        ctx.strokeStyle = 'rgba(15, 23, 42, 0.34)';
+        ctx.beginPath();
+        ctx.moveTo(tx + tw - 0.75, ty + 0.75);
+        ctx.lineTo(tx + tw - 0.75, ty + th - 0.75);
+        ctx.lineTo(tx + 0.75, ty + th - 0.75);
+        ctx.stroke();
+
+        // ★ ダメージ段階に応じたガラスクラック（ひび割れ）表現（削っている手応え！）
+        if (tile.hp < tile.maxHp) {
+          const seed = (tile.id * 37) % 17;
+          const cx = tx + tw * (0.42 + (seed % 5) * 0.04);
+          const cy = ty + th * (0.44 + (seed % 3) * 0.06);
+
+          ctx.save();
+          // クラックの影（視認性担保）
+          ctx.strokeStyle = 'rgba(15, 23, 42, 0.45)';
+          ctx.lineWidth = tile.hp === 1 ? 2.2 : 1.6;
           ctx.beginPath();
-          // 左上
+          if (seed % 2 === 0) {
+            ctx.moveTo(tx + 6, ty + 5);
+            ctx.lineTo(cx - 5, cy - 2);
+            ctx.lineTo(cx + 4, cy + 5);
+          } else {
+            ctx.moveTo(tx + tw - 7, ty + 6);
+            ctx.lineTo(cx + 4, cy - 3);
+            ctx.lineTo(cx - 3, cy + 4);
+          }
+          if (tile.hp === 1) {
+            // あと1打で割れる状態（40%）：深い放射状ひび割れ！
+            ctx.moveTo(cx, cy);
+            ctx.lineTo(tx + tw - 8, ty + th - 6);
+            ctx.moveTo(cx - 3, cy + 2);
+            ctx.lineTo(tx + 9, ty + th - 5);
+          }
+          ctx.stroke();
+
+          // クラックの白いエッジ反射光
+          ctx.strokeStyle = tile.hp === 1 ? 'rgba(255, 255, 255, 0.92)' : 'rgba(255, 255, 255, 0.75)';
+          ctx.lineWidth = tile.hp === 1 ? 1.3 : 0.9;
+          ctx.stroke();
+
+          // hp === 1 のときは「次の一撃で砕け散る」スカイブルーのインナーテンション枠
+          if (tile.hp === 1) {
+            ctx.strokeStyle = 'rgba(56, 189, 248, 0.65)';
+            ctx.lineWidth = 1.4;
+            ctx.strokeRect(tx + 1.5, ty + 1.5, tw - 3, th - 3);
+          }
+          ctx.restore();
+        }
+
+        // コアゾーン（周囲8マスを一気に連鎖削りする真鍮ゴールド枠）
+        if (tile.isCoreZone) {
+          const pulse = 0.68 + Math.sin(now * 0.005) * 0.2;
+          ctx.save();
+          ctx.strokeStyle = `rgba(245, 158, 11, ${pulse})`;
+          ctx.lineWidth = 2;
+          ctx.strokeRect(tx + 2.5, ty + 2.5, tw - 5, th - 5);
+
+          const bLen = 8;
+          const x1 = tx + 2.5;
+          const y1 = ty + 2.5;
+          const x2 = tx + tw - 2.5;
+          const y2 = ty + th - 2.5;
+          ctx.strokeStyle = '#fef08a';
+          ctx.lineWidth = 2.2;
+          ctx.beginPath();
           ctx.moveTo(x1, y1 + bLen); ctx.lineTo(x1, y1); ctx.lineTo(x1 + bLen, y1);
-          // 右上
           ctx.moveTo(x2 - bLen, y1); ctx.lineTo(x2, y1); ctx.lineTo(x2, y1 + bLen);
-          // 左下
           ctx.moveTo(x1, y2 - bLen); ctx.lineTo(x1, y2); ctx.lineTo(x1 + bLen, y2);
-          // 右下
           ctx.moveTo(x2 - bLen, y2); ctx.lineTo(x2, y2); ctx.lineTo(x2, y2 - bLen);
           ctx.stroke();
+          ctx.restore();
         }
 
-        // ヒット直後（150ms以内）のホワイトフラッシュ
+        // ヒット直後（160ms以内）のクリスタルフラッシュ
         const elapsedSinceHit = now - tile.lastHitAt;
-        if (tile.lastHitAt > 0 && elapsedSinceHit < 150) {
-          const flashAlpha = (1 - elapsedSinceHit / 150) * 0.45;
+        if (tile.lastHitAt > 0 && elapsedSinceHit < 160) {
+          const flashAlpha = (1 - elapsedSinceHit / 160) * 0.55;
           ctx.fillStyle = `rgba(255, 255, 255, ${flashAlpha})`;
-          ctx.fillRect(tile.x, tile.y, tile.width, tile.height);
+          ctx.fillRect(tx, ty, tw, th);
         }
       }
 
-      // 0%（hp === 0）になった四角形を「クリア済みウィンドウ枠」としてくっきり囲む
+      // 0%（hp === 0）になったクリア済みウィンドウ枠（洗練されたカメラファインダー型ブラケット）
       for (const tile of tilesRef.current) {
         if (tile.hp > 0) continue;
 
@@ -1019,122 +1330,125 @@ export default function App() {
         const rh = tile.height;
 
         const elapsedSinceClear = now - tile.clearedAt;
-        if (tile.clearedAt > 0 && elapsedSinceClear < 350) {
-          const clearGlowAlpha = (1 - elapsedSinceClear / 350) * 0.35;
-          ctx.fillStyle = `rgba(14, 165, 233, ${clearGlowAlpha})`;
+        if (tile.clearedAt > 0 && elapsedSinceClear < 380) {
+          const clearGlowAlpha = (1 - elapsedSinceClear / 380) * 0.42;
+          ctx.fillStyle = `rgba(56, 189, 248, ${clearGlowAlpha})`;
           ctx.fillRect(rx, ry, rw, rh);
         }
 
-        ctx.strokeStyle = 'rgba(2, 132, 199, 0.85)';
-        ctx.lineWidth = 1.8;
-        ctx.strokeRect(rx + 1.5, ry + 1.5, rw - 3, rh - 3);
+        ctx.strokeStyle = 'rgba(14, 165, 233, 0.35)';
+        ctx.lineWidth = 1;
+        ctx.strokeRect(rx + 1, ry + 1, rw - 2, rh - 2);
 
-        const cLen = 8;
-        const pad = 2.5;
-        ctx.strokeStyle = '#0284c7';
+        const cLen = 7;
+        const pad = 2;
+        ctx.strokeStyle = 'rgba(2, 132, 199, 0.9)';
         ctx.lineWidth = 2;
         ctx.beginPath();
-        // 左上
-        ctx.moveTo(rx + pad, ry + pad + cLen);
-        ctx.lineTo(rx + pad, ry + pad);
-        ctx.lineTo(rx + pad + cLen, ry + pad);
-        // 右上
-        ctx.moveTo(rx + rw - pad - cLen, ry + pad);
-        ctx.lineTo(rx + rw - pad, ry + pad);
-        ctx.lineTo(rx + rw - pad, ry + pad + cLen);
-        // 左下
-        ctx.moveTo(rx + pad, ry + rh - pad - cLen);
-        ctx.lineTo(rx + pad, ry + rh - pad);
-        ctx.lineTo(rx + pad + cLen, ry + rh - pad);
-        // 右下
-        ctx.moveTo(rx + rw - pad - cLen, ry + rh - pad);
-        ctx.lineTo(rx + rw - pad, ry + rh - pad);
-        ctx.lineTo(rx + rw - pad, ry + rh - pad - cLen);
+        ctx.moveTo(rx + pad, ry + pad + cLen); ctx.lineTo(rx + pad, ry + pad); ctx.lineTo(rx + pad + cLen, ry + pad);
+        ctx.moveTo(rx + rw - pad - cLen, ry + pad); ctx.lineTo(rx + rw - pad, ry + pad); ctx.lineTo(rx + rw - pad, ry + pad + cLen);
+        ctx.moveTo(rx + pad, ry + rh - pad - cLen); ctx.lineTo(rx + pad, ry + rh - pad); ctx.lineTo(rx + pad + cLen, ry + rh - pad);
+        ctx.moveTo(rx + rw - pad - cLen, ry + rh - pad); ctx.lineTo(rx + rw - pad, ry + rh - pad); ctx.lineTo(rx + rw - pad, ry + rh - pad - cLen);
         ctx.stroke();
       }
-    }
 
-    // 写真領域の下端境界ライン
-    ctx.strokeStyle = 'rgba(203, 213, 225, 0.8)';
-    ctx.lineWidth = 1.5;
-    ctx.beginPath();
-    ctx.moveTo(0, TILE_AREA_TOP + TILE_AREA_HEIGHT + 0.5);
-    ctx.lineTo(CANVAS_WIDTH, TILE_AREA_TOP + TILE_AREA_HEIGHT + 0.5);
-    ctx.stroke();
+      // 写真ステージ下端の立体額装ドロップシャドウ ＆ 真鍮/スレート仕切りトリム
+      const trimY = TILE_AREA_TOP + TILE_AREA_HEIGHT;
+      const stageShadow = ctx.createLinearGradient(0, trimY, 0, trimY + 14);
+      stageShadow.addColorStop(0, 'rgba(24, 24, 27, 0.22)');
+      stageShadow.addColorStop(1, 'rgba(24, 24, 27, 0)');
+      ctx.fillStyle = stageShadow;
+      ctx.fillRect(0, trimY, CANVAS_WIDTH, 14);
 
-    // 4. モザイク破片パーティクル
-    if (particlesRef.current.length > 0) {
-      for (const p of particlesRef.current) {
-        ctx.fillStyle = p.color;
-        ctx.globalAlpha = Math.max(0, p.alpha);
-        if (p.isSquare) {
-          ctx.fillRect(p.x - p.size, p.y - p.size, p.size * 2, p.size * 2);
-        } else {
-          ctx.beginPath();
-          ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
-          ctx.fill();
-        }
-      }
-      ctx.globalAlpha = 1;
-    }
+      ctx.fillStyle = '#27272a';
+      ctx.fillRect(0, trimY - 1, CANVAS_WIDTH, 2.5);
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.45)';
+      ctx.fillRect(0, trimY + 1.5, CANVAS_WIDTH, 1);
 
-    // 5. フローティングポップアップ（"0% CLEAR!", "★ CHAIN!" 等）白背景で視認性抜群
-    if (floatingFeedbacksRef.current.length > 0) {
-      ctx.save();
-      ctx.font = 'bold 13px sans-serif';
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      for (const fb of floatingFeedbacksRef.current) {
-        ctx.globalAlpha = Math.max(0, Math.min(1, fb.alpha));
-        ctx.strokeStyle = 'rgba(255, 255, 255, 0.95)';
-        ctx.lineWidth = 4;
-        ctx.strokeText(fb.text, fb.x, fb.y);
-        ctx.fillStyle = fb.color;
-        ctx.fillText(fb.text, fb.x, fb.y);
-      }
-      ctx.restore();
-    }
-
-    // 6. 下部の広いプレイフィールド上のパドル・発射ガイド・ボール
-    if (!isFullRevealPhase) {
-      ctx.strokeStyle = 'rgba(226, 232, 240, 0.9)';
-      ctx.lineWidth = 1;
+      // 6. パドル走行レール ＆ 精密リフレクター自機 ＆ 発射ガイド ＆ コメットボール
+      const railY = PADDLE_Y + PADDLE_HEIGHT / 2;
+      ctx.strokeStyle = 'rgba(168, 162, 158, 0.5)';
+      ctx.lineWidth = 1.5;
       ctx.beginPath();
-      ctx.moveTo(24, PADDLE_Y + PADDLE_HEIGHT / 2);
-      ctx.lineTo(CANVAS_WIDTH - 24, PADDLE_Y + PADDLE_HEIGHT / 2);
+      ctx.moveTo(18, railY);
+      ctx.lineTo(CANVAS_WIDTH - 18, railY);
       ctx.stroke();
+      // レール両端のストッパーピン
+      ctx.fillStyle = '#a8a29e';
+      ctx.fillRect(15, railY - 4, 3, 8);
+      ctx.fillRect(CANVAS_WIDTH - 18, railY - 4, 3, 8);
 
+      // パドル描画（衝突時のスプリング沈み込み recoil ＆ エッジバンパー機能美）
       const px = paddleXRef.current;
-      const py = PADDLE_Y;
+      const py = PADDLE_Y + paddleRecoilRef.current;
+      const isSliceActive = sliceBoostTimerRef.current > 0;
+
+      ctx.save();
+      ctx.shadowColor = 'rgba(24, 24, 27, 0.28)';
+      ctx.shadowBlur = 10;
+      ctx.shadowOffsetY = 4;
+
       const pGrad = ctx.createLinearGradient(px, py, px, py + PADDLE_HEIGHT);
       if (catchAndAimModeRef.current) {
         pGrad.addColorStop(0, '#10b981');
-        pGrad.addColorStop(1, '#059669');
+        pGrad.addColorStop(1, '#047857');
       } else {
-        pGrad.addColorStop(0, '#1e293b');
-        pGrad.addColorStop(1, '#0f172a');
+        pGrad.addColorStop(0, '#3f3f46');
+        pGrad.addColorStop(0.45, '#18181b');
+        pGrad.addColorStop(1, '#09090b');
       }
       ctx.fillStyle = pGrad;
       traceRoundedRect(ctx, px, py, PADDLE_WIDTH, PADDLE_HEIGHT, 7);
       ctx.fill();
+      ctx.restore();
 
-      ctx.strokeStyle = catchAndAimModeRef.current ? '#34d399' : '#475569';
+      // パドル両端の「アングル・エッジバンパー」（端で鋭角68度に切れるゾーンを視覚化！）
+      ctx.save();
+      traceRoundedRect(ctx, px, py, PADDLE_WIDTH, PADDLE_HEIGHT, 7);
+      ctx.clip();
+      const capW = 20;
+      ctx.fillStyle = catchAndAimModeRef.current
+        ? '#34d399'
+        : isSliceActive
+        ? '#f59e0b'
+        : '#0ea5e9';
+      ctx.fillRect(px, py, capW, PADDLE_HEIGHT);
+      ctx.fillRect(px + PADDLE_WIDTH - capW, py, capW, PADDLE_HEIGHT);
+      // バンパー区切りスリット
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.7)';
+      ctx.fillRect(px + capW, py, 1.5, PADDLE_HEIGHT);
+      ctx.fillRect(px + PADDLE_WIDTH - capW - 1.5, py, 1.5, PADDLE_HEIGHT);
+      // 上部エッジのメタリック鏡面ハイライト
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.32)';
+      ctx.fillRect(px + 4, py + 1.2, PADDLE_WIDTH - 8, 2);
+      // センター照準マーカー
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.65)';
+      ctx.beginPath();
+      ctx.arc(px + PADDLE_WIDTH / 2, py + PADDLE_HEIGHT / 2, 2.2, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+
+      ctx.strokeStyle = catchAndAimModeRef.current ? '#059669' : '#27272a';
       ctx.lineWidth = 1.2;
       traceRoundedRect(ctx, px, py, PADDLE_WIDTH, PADDLE_HEIGHT, 7);
       ctx.stroke();
 
       const ball = ballRef.current;
 
+      // 発射待機中の精密レーザーサイトガイド
       if (ball.attachedToPaddle) {
         const launchAngle = getLaunchAngleFromPaddle();
-        const guideLen = 145;
+        const guideLen = 152;
         const targetX = ball.x + Math.sin(launchAngle) * guideLen;
         const targetY = ball.y - Math.cos(launchAngle) * guideLen;
 
         ctx.save();
-        ctx.strokeStyle = 'rgba(2, 132, 199, 0.85)';
-        ctx.lineWidth = 2;
-        ctx.setLineDash([5, 5]);
+        const gLine = ctx.createLinearGradient(ball.x, ball.y, targetX, targetY);
+        gLine.addColorStop(0, 'rgba(2, 132, 199, 0.9)');
+        gLine.addColorStop(1, 'rgba(2, 132, 199, 0.15)');
+        ctx.strokeStyle = gLine;
+        ctx.lineWidth = 2.2;
+        ctx.setLineDash([6, 5]);
         ctx.beginPath();
         ctx.moveTo(ball.x, ball.y - BALL_RADIUS - 3);
         ctx.lineTo(targetX, targetY);
@@ -1145,43 +1459,109 @@ export default function App() {
         ctx.beginPath();
         ctx.arc(targetX, targetY, 4, 0, Math.PI * 2);
         ctx.fill();
+        ctx.strokeStyle = '#ffffff';
+        ctx.lineWidth = 1.5;
+        ctx.stroke();
+        ctx.restore();
+      } else if (ballTrailRef.current.length > 1) {
+        // ★ 飛行中のボール・コメットテイル（流星の尾：スピード感と視認性が劇的向上！）
+        ctx.save();
+        const trail = ballTrailRef.current;
+        for (let i = 0; i < trail.length; i++) {
+          const pt = trail[i];
+          const ratio = (i + 1) / (trail.length + 1);
+          const r = BALL_RADIUS * (0.28 + ratio * 0.62);
+          ctx.globalAlpha = ratio * (isSliceActive ? 0.46 : 0.32);
+          ctx.fillStyle = isSliceActive ? '#f59e0b' : '#38bdf8';
+          ctx.beginPath();
+          ctx.arc(pt.x, pt.y, r, 0, Math.PI * 2);
+          ctx.fill();
+        }
         ctx.restore();
       }
 
-      // ボール描画（白背景で視認性の高い、質感のあるダークスレート・ボール）
+      // ボール本体（高コントラスト金属ガラス球体）
       ctx.save();
-      ctx.shadowColor = 'rgba(15, 23, 42, 0.25)';
-      ctx.shadowBlur = 8;
-      ctx.shadowOffsetY = 2;
+      ctx.shadowColor = isSliceActive ? 'rgba(245, 158, 11, 0.45)' : 'rgba(15, 23, 42, 0.32)';
+      ctx.shadowBlur = isSliceActive ? 12 : 8;
+      ctx.shadowOffsetY = 2.5;
       const bGrad = ctx.createRadialGradient(
-        ball.x - 2.5,
-        ball.y - 2.5,
-        1.5,
+        ball.x - 2.8,
+        ball.y - 2.8,
+        1.2,
         ball.x,
         ball.y,
         BALL_RADIUS
       );
-      bGrad.addColorStop(0, '#ffffff');
-      bGrad.addColorStop(0.35, '#38bdf8');
-      bGrad.addColorStop(1, '#0369a1');
+      if (isSliceActive) {
+        bGrad.addColorStop(0, '#ffffff');
+        bGrad.addColorStop(0.4, '#fcd34d');
+        bGrad.addColorStop(1, '#d97706');
+      } else {
+        bGrad.addColorStop(0, '#ffffff');
+        bGrad.addColorStop(0.38, '#38bdf8');
+        bGrad.addColorStop(1, '#0369a1');
+      }
       ctx.fillStyle = bGrad;
       ctx.beginPath();
       ctx.arc(ball.x, ball.y, BALL_RADIUS, 0, Math.PI * 2);
       ctx.fill();
 
-      ctx.strokeStyle = '#0c4a6e';
-      ctx.lineWidth = 1.5;
+      ctx.strokeStyle = isSliceActive ? '#78350f' : '#082f49';
+      ctx.lineWidth = 1.8;
       ctx.stroke();
       ctx.restore();
     }
 
-    // ★コアタイル破壊時の衝撃波（ショックウェーブリング）描画
+    // 4. モザイク破片 ＆ 祝祭コンフェッティ（回転＆重力対応パーティクル）
+    if (particlesRef.current.length > 0) {
+      ctx.save();
+      for (const p of particlesRef.current) {
+        ctx.fillStyle = p.color;
+        ctx.globalAlpha = Math.max(0, Math.min(1, p.alpha));
+        if (p.isSquare) {
+          ctx.save();
+          ctx.translate(p.x, p.y);
+          if (p.rotation) {
+            ctx.rotate(p.rotation);
+          }
+          const w = p.size * 2;
+          const h = p.size * 2 * (p.aspectRatio || 1);
+          ctx.fillRect(-w / 2, -h / 2, w, h);
+          ctx.restore();
+        } else {
+          ctx.beginPath();
+          ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+          ctx.fill();
+        }
+      }
+      ctx.restore();
+    }
+
+    // 5. フローティングポップアップ（"0% CLEAR!", "★ BLAST CHAIN! ★" 等）
+    if (floatingFeedbacksRef.current.length > 0) {
+      ctx.save();
+      ctx.font = '900 13px "Plus Jakarta Sans", sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      for (const fb of floatingFeedbacksRef.current) {
+        ctx.globalAlpha = Math.max(0, Math.min(1, fb.alpha));
+        ctx.strokeStyle = 'rgba(24, 24, 27, 0.9)';
+        ctx.lineWidth = 4;
+        ctx.strokeText(fb.text, fb.x, fb.y);
+        ctx.fillStyle = fb.color;
+        ctx.fillText(fb.text, fb.x, fb.y);
+      }
+      ctx.restore();
+    }
+
+    // 6. 衝撃波（ショックウェーブリング ＆ バウンスリップル）描画
     if (shockwavesRef.current.length > 0) {
       ctx.save();
       for (const sw of shockwavesRef.current) {
         ctx.strokeStyle = sw.color;
         ctx.globalAlpha = Math.max(0, sw.alpha);
-        ctx.lineWidth = 3.5;
+        ctx.lineWidth = sw.maxRadius > 80 ? 3.5 : 2;
         ctx.beginPath();
         ctx.arc(sw.x, sw.y, sw.radius, 0, Math.PI * 2);
         ctx.stroke();
@@ -1189,7 +1569,7 @@ export default function App() {
       ctx.restore();
     }
 
-    // ★コアタイル破壊時の全画面ライトフラッシュ
+    // 7. 全画面ライトフラッシュ
     if (flashAlphaRef.current > 0) {
       ctx.save();
       ctx.fillStyle = `rgba(254, 243, 199, ${Math.min(0.42, flashAlphaRef.current)})`;
@@ -1244,6 +1624,14 @@ export default function App() {
       // 全画面ライトフラッシュの減衰
       if (flashAlphaRef.current > 0) {
         flashAlphaRef.current = Math.max(0, flashAlphaRef.current - dt * 3.2);
+      }
+
+      // パドルヒット反動 ＆ スライスブースト演出タイマーの減衰
+      if (paddleRecoilRef.current > 0) {
+        paddleRecoilRef.current = Math.max(0, paddleRecoilRef.current - dt * 30);
+      }
+      if (sliceBoostTimerRef.current > 0) {
+        sliceBoostTimerRef.current = Math.max(0, sliceBoostTimerRef.current - dt);
       }
 
       if (currentPhase === 'PLAYING' || currentPhase === 'READY') {
@@ -1356,17 +1744,33 @@ export default function App() {
             ball.x += ball.vx * subDt;
             ball.y += ball.vy * subDt;
 
-            // 左右壁反射
+            // 左右壁反射（バウンスリップル付き）
             if (ball.x - BALL_RADIUS < 4) {
               ball.x = 4 + BALL_RADIUS;
               ball.vx = Math.abs(ball.vx);
               normalizeAndEnforceMinVy(true);
               soundEngine.playBounce(false);
+              shockwavesRef.current.push({
+                x: 6,
+                y: ball.y,
+                radius: 4,
+                maxRadius: 28,
+                alpha: 0.65,
+                color: '#38bdf8',
+              });
             } else if (ball.x + BALL_RADIUS > CANVAS_WIDTH - 4) {
               ball.x = CANVAS_WIDTH - 4 - BALL_RADIUS;
               ball.vx = -Math.abs(ball.vx);
               normalizeAndEnforceMinVy(true);
               soundEngine.playBounce(false);
+              shockwavesRef.current.push({
+                x: CANVAS_WIDTH - 6,
+                y: ball.y,
+                radius: 4,
+                maxRadius: 28,
+                alpha: 0.65,
+                color: '#38bdf8',
+              });
             }
 
             // 天井反射
@@ -1375,6 +1779,14 @@ export default function App() {
               ball.vy = Math.abs(ball.vy);
               normalizeAndEnforceMinVy(true);
               soundEngine.playBounce(false);
+              shockwavesRef.current.push({
+                x: ball.x,
+                y: 6,
+                radius: 4,
+                maxRadius: 28,
+                alpha: 0.65,
+                color: '#38bdf8',
+              });
             }
 
             // パドル衝突判定
@@ -1389,6 +1801,7 @@ export default function App() {
               const rawOffset = ball.x - paddleCenter;
               const hitOffset = Math.max(-1, Math.min(1, rawOffset / (PADDLE_WIDTH / 2)));
               comboRef.current = 0;
+              paddleRecoilRef.current = 4.2;
 
               if (catchAndAimModeRef.current) {
                 ball.attachedToPaddle = true;
@@ -1399,6 +1812,7 @@ export default function App() {
                 ball.vx = 0;
                 ball.vy = 0;
                 ball.y = PADDLE_Y - BALL_RADIUS - 2;
+                ballTrailRef.current = [];
                 soundEngine.playBounce(true);
                 break;
               } else {
@@ -1411,7 +1825,6 @@ export default function App() {
                 let bounceAngle = sign * curveRatio * maxBounceAngle;
 
                 // 2. パドルのスイング速度（スライステクニック）の反映
-                // パドルを右に振りながら打つと右奥へスライス、逆に切ると角度を相殺
                 const sliceImpulse = Math.max(-0.22, Math.min(0.22, (paddleVxRef.current / 750) * 0.22));
                 bounceAngle = Math.max(-maxBounceAngle, Math.min(maxBounceAngle, bounceAngle + sliceImpulse));
 
@@ -1420,8 +1833,38 @@ export default function App() {
                 normalizeAndEnforceMinVy(false);
                 ball.y = PADDLE_Y - BALL_RADIUS - 1;
 
+                const isSharpSlice = absOffset > 0.65 || Math.abs(sliceImpulse) > 0.12;
+                if (isSharpSlice) {
+                  sliceBoostTimerRef.current = 0.52;
+                }
+
+                // パドルヒット波紋 ＆ スパーク粒子（打球の手応え！）
+                shockwavesRef.current.push({
+                  x: ball.x,
+                  y: PADDLE_Y,
+                  radius: 5,
+                  maxRadius: isSharpSlice ? 44 : 30,
+                  alpha: 0.8,
+                  color: isSharpSlice ? '#f59e0b' : '#0ea5e9',
+                });
+                for (let k = 0; k < (isSharpSlice ? 7 : 4); k++) {
+                  const spAng = -Math.PI * (0.15 + Math.random() * 0.7);
+                  const spSpd = 65 + Math.random() * 75;
+                  particlesRef.current.push({
+                    x: ball.x,
+                    y: PADDLE_Y,
+                    vx: Math.cos(spAng) * spSpd,
+                    vy: Math.sin(spAng) * spSpd,
+                    color: isSharpSlice ? '#fbbf24' : '#38bdf8',
+                    alpha: 0.95,
+                    size: isSharpSlice ? 2.8 : 2.2,
+                    isSquare: false,
+                    gravity: 220,
+                  });
+                }
+
                 // エッジスライス時は高音の軽快なヒット音
-                soundEngine.playBounce(absOffset > 0.65);
+                soundEngine.playBounce(isSharpSlice);
               }
             }
 
@@ -1522,7 +1965,6 @@ export default function App() {
                 } else {
                   // 通常タイルの0%完全破壊時も、心地よい軽微な揺れ
                   triggerScreenShake(3.5, 120);
-                  soundEngine.playTileBreak(comboRef.current, true);
                   floatingFeedbacksRef.current.push({
                     x: tileCenterX,
                     y: tileCenterY,
@@ -1532,8 +1974,6 @@ export default function App() {
                     alpha: 1,
                   });
                 }
-              } else {
-                soundEngine.playTileBreak(comboRef.current, false);
               }
 
               const overlapX = hitTile.width / 2 + BALL_RADIUS - Math.abs(ball.x - tileCenterX);
@@ -1566,26 +2006,30 @@ export default function App() {
               }
               normalizeAndEnforceMinVy(true);
 
-              // モザイク破片エフェクト（★コアタイル破壊時は32個のゴールドスパークが爆散！）
+              // モザイク破片エフェクト（重力落下＆回転するリアルなガラスモザイク片！）
               const isCoreBlast = hitTile.hp === 0 && hitTile.isCoreZone;
-              const pCount = isCoreBlast ? 32 : hitTile.hp === 0 ? 12 : 6;
+              const pCount = isCoreBlast ? 32 : hitTile.hp === 0 ? 14 : 7;
               for (let i = 0; i < pCount; i++) {
                 const angle = (Math.PI * 2 * i) / pCount + Math.random() * 0.5;
-                const speed = (isCoreBlast ? 120 : hitTile.hp === 0 ? 85 : 50) + Math.random() * (isCoreBlast ? 90 : 55);
+                const speed = (isCoreBlast ? 130 : hitTile.hp === 0 ? 95 : 58) + Math.random() * (isCoreBlast ? 95 : 60);
                 particlesRef.current.push({
                   x: hitClosestX,
                   y: hitClosestY,
                   vx: Math.cos(angle) * speed,
-                  vy: Math.sin(angle) * speed,
+                  vy: Math.sin(angle) * speed - 35,
                   color:
                     hitTile.hp === 0
                       ? hitTile.isCoreZone
                         ? '#fbbf24'
                         : '#38bdf8'
-                      : '#e2e8f0',
-                  alpha: 0.95,
-                  size: (isCoreBlast ? 4.5 : hitTile.hp === 0 ? 4 : 2.8) + Math.random() * 1.5,
+                      : '#f8fafc',
+                  alpha: 0.98,
+                  size: (isCoreBlast ? 4.6 : hitTile.hp === 0 ? 4.2 : 3.0) + Math.random() * 1.5,
                   isSquare: true,
+                  gravity: 340,
+                  rotation: Math.random() * Math.PI * 2,
+                  vRot: (Math.random() - 0.5) * 14,
+                  decayRate: isCoreBlast ? 1.8 : 2.3,
                 });
               }
 
@@ -1610,12 +2054,20 @@ export default function App() {
 
             if (phaseRef.current !== 'PLAYING') break;
 
-            // 落球判定: ライフ廃止・タイムロス＆3, 2, 1クイックリスタート
+              // 落球判定: ライフ廃止・タイムロス＆3, 2, 1クイックリスタート
             if (ball.y - BALL_RADIUS > CANVAS_HEIGHT + 6) {
               soundEngine.playMiss();
               resetBallOnPaddle();
               triggerDropRestart();
               break;
+            }
+          }
+
+          // 飛行中のコメットテイル座標を記録（最大9フレーム保持）
+          if (!ball.attachedToPaddle && phaseRef.current === 'PLAYING') {
+            ballTrailRef.current.push({ x: ball.x, y: ball.y });
+            if (ballTrailRef.current.length > 9) {
+              ballTrailRef.current.shift();
             }
           }
         }
@@ -1624,9 +2076,15 @@ export default function App() {
       if (particlesRef.current.length > 0) {
         for (let i = particlesRef.current.length - 1; i >= 0; i--) {
           const p = particlesRef.current[i];
+          if (p.gravity) {
+            p.vy += p.gravity * dt;
+          }
+          if (p.vRot !== undefined) {
+            p.rotation = (p.rotation || 0) + p.vRot * dt;
+          }
           p.x += p.vx * dt;
           p.y += p.vy * dt;
-          p.alpha -= dt * 2.6;
+          p.alpha -= dt * (p.decayRate || 2.6);
           if (p.alpha <= 0) {
             particlesRef.current.splice(i, 1);
           }
@@ -1747,7 +2205,8 @@ export default function App() {
     return acc + (rec && !rec.isPractice ? rec.score : 0);
   }, 0);
 
-  const totalCourseElapsedSec = Object.values(stageRecords).reduce((acc, rec) => {
+  const priorStagesElapsedSec = activeStages.slice(0, currentStageIndex).reduce((acc, st) => {
+    const rec = stageRecords[st.id];
     return acc + (rec ? rec.elapsedSec : 0);
   }, 0);
 
@@ -1760,19 +2219,19 @@ export default function App() {
   const isGameActive = phase !== 'TITLE' && phase !== 'SUMMARY';
   const isDockExpanded =
     phase === 'ANSWERING' || phase === 'LAST_CHANCE' || phase === 'STAGE_RESULT';
-  const hasCluesRevealed = stageMetrics.clearedCount > 0 || stageMetrics.mosaicPercent <= 88;
+  const hasCluesRevealed = stageMetrics.clearedCount > 0 || stageMetrics.damagedCount > 0;
 
   return (
-    <div className="h-dvh w-full bg-zinc-100 text-zinc-900 flex flex-col items-center justify-between select-none overflow-hidden">
-      {/* クリーンなトップステータスバー（1行完結・純粋タイムアタック） */}
-      <header className="w-full max-w-xl h-12 px-3 flex items-center justify-between border-b border-zinc-200/90 bg-white/95 backdrop-blur-md shrink-0 shadow-xs">
-        {/* 左側: ホームボタン または ブランドロゴ */}
+    <div className="h-dvh w-full text-zinc-900 flex flex-col items-center justify-between select-none overflow-hidden">
+      {/* アーケード計器盤（HUD）トップコンソール（1行完結・純粋タイムアタック） */}
+      <header className="w-full max-w-xl h-12 px-2.5 sm:px-3 flex items-center justify-between border-b-2 border-zinc-300/90 bg-[#f6f5f1]/95 backdrop-blur-md shrink-0 shadow-[0_2px_10px_rgba(24,24,27,0.06)] z-30">
+        {/* 左側: ホームタクタイルボタン または ブランドロゴ */}
         <div className="flex items-center gap-2 shrink-0">
           {isGameActive ? (
             <button
               type="button"
               onClick={() => setPhase('TITLE')}
-              className="min-h-8 min-w-8 px-2 rounded-lg bg-zinc-100 hover:bg-zinc-200 text-zinc-700 border border-zinc-200 flex items-center justify-center transition cursor-pointer keycap-btn"
+              className="min-h-8 min-w-8 px-2 rounded-xl bg-white hover:bg-zinc-50 text-zinc-700 border border-zinc-300 flex items-center justify-center transition cursor-pointer keycap-btn"
               title="ホームへ戻る"
               aria-label="ホームへ戻る"
             >
@@ -1784,73 +2243,95 @@ export default function App() {
 
           {!isGameActive && (
             <div className="flex items-center gap-1.5 min-w-0">
-              <span className="font-display text-xs sm:text-sm font-extrabold tracking-tight text-zinc-900 truncate">
+              <span className="font-display text-xs sm:text-sm font-black tracking-tight text-zinc-900 truncate">
                 MOSAIC BREAK
               </span>
-              <span className="text-[11px] text-zinc-400 font-medium hidden sm:inline">
+              <span className="text-[11px] text-zinc-500 font-semibold hidden sm:inline">
                 モザイクブレイク
               </span>
             </div>
           )}
         </div>
 
-        {/* 中央: ステージ進行プログレスドット（● ● ○ ○ ○） */}
+        {/* 中央: アーケード・ステージ進行ランプゲージ */}
         {isGameActive && (
           <div className="flex items-center gap-1.5">
             {activeStages.length <= 10 ? (
-              <div className="flex items-center gap-1.5 px-3 py-1 bg-zinc-100 border border-zinc-200/80 rounded-full shadow-2xs">
-                {activeStages.map((_, idx) => (
-                  <span
-                    key={idx}
-                    className={`w-2 h-2 rounded-full transition-all duration-300 ${
-                      idx < currentStageIndex
-                        ? 'bg-emerald-500 scale-95'
-                        : idx === currentStageIndex
-                        ? 'bg-blue-600 scale-125 ring-2 ring-blue-400/40'
-                        : 'bg-zinc-300'
-                    }`}
-                    title={`STAGE ${idx + 1}`}
-                  />
-                ))}
+              <div className="flex items-center gap-2 px-2.5 py-1 bg-zinc-900 border border-zinc-800 rounded-xl shadow-[inset_0_1.5px_3px_rgba(0,0,0,0.6)]">
+                <span className="font-display text-[10px] font-black text-zinc-400 tracking-wider">
+                  STG
+                </span>
+                <div className="flex items-center gap-1.5">
+                  {activeStages.map((_, idx) => (
+                    <span
+                      key={idx}
+                      className={`h-2 rounded-xs transition-all duration-300 ${
+                        idx < currentStageIndex
+                          ? 'w-2.5 bg-emerald-400 shadow-[0_0_6px_rgba(52,211,153,0.7)]'
+                          : idx === currentStageIndex
+                          ? 'w-3.5 bg-amber-400 shadow-[0_0_8px_rgba(251,191,36,0.85)]'
+                          : 'w-2 bg-zinc-700'
+                      }`}
+                      title={`STAGE ${idx + 1}`}
+                    />
+                  ))}
+                </div>
               </div>
             ) : (
-              <div className="flex items-center gap-1 px-3 py-1 bg-zinc-100 border border-zinc-200/80 rounded-full font-display text-[11px] font-bold text-zinc-800 shadow-2xs">
-                <span className="text-blue-600 font-extrabold">STAGE {currentStageIndex + 1}</span>
-                <span className="text-zinc-400 font-normal">/ {activeStages.length}</span>
+              <div className="flex items-center gap-1 px-3 py-1 bg-zinc-900 border border-zinc-800 rounded-xl font-display text-[11px] font-bold text-white shadow-[inset_0_1.5px_3px_rgba(0,0,0,0.6)]">
+                <span className="text-amber-400 font-black">STAGE {currentStageIndex + 1}</span>
+                <span className="text-zinc-400 font-semibold">/ {activeStages.length}</span>
               </div>
             )}
           </div>
         )}
 
-        {/* 右側: 唯一の時計（累計ストップウォッチ ⏱️ 00:23.4） ＆ ホールド ＆ ミュート */}
-        <div className="flex items-center gap-2 shrink-0">
+        {/* 右側: デジタル・ストップウォッチ計器（ペナルティ時は真紅激震シェイク！） ＆ サウンド・ポーズ */}
+        <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
           {isGameActive && (
-            <>
+            <div className="relative">
               <div
-                className="flex items-center gap-1 text-xs font-display tabular-nums font-bold px-2.5 py-1 bg-zinc-100 border border-zinc-200/90 rounded-lg text-zinc-900 shadow-2xs"
+                key={penaltyShakeKey}
+                className={`flex items-center gap-1.5 text-xs sm:text-[13px] font-display tabular-nums font-black px-2.5 py-1 rounded-xl border transition-colors ${
+                  wrongPenaltyBanner
+                    ? 'bg-rose-600 border-rose-400 text-white shadow-[0_0_14px_rgba(225,29,72,0.55)] animate-penalty-shake'
+                    : 'bg-zinc-900 border-zinc-800 text-white shadow-[inset_0_1.5px_4px_rgba(0,0,0,0.65)]'
+                }`}
                 title="コース合計経過タイム（タイムアタック）"
               >
-                <Timer className="w-3.5 h-3.5 text-blue-600" />
+                <Timer
+                  className={`w-3.5 h-3.5 shrink-0 ${
+                    wrongPenaltyBanner ? 'text-rose-200' : 'text-amber-400'
+                  }`}
+                />
                 <span ref={elapsedTimerSpanRef}>
-                  {formatStopwatch(totalCourseElapsedSec + stageMetrics.elapsedSec)}
+                  {formatStopwatch(priorStagesElapsedSec + stageMetrics.elapsedSec)}
                 </span>
               </div>
 
-
-            </>
+              {/* +5.0s ペナルティ加算時の赤色フローティングポップアップ */}
+              {penaltyShakeKey > 0 && wrongPenaltyBanner && (
+                <div
+                  key={`pop-${penaltyShakeKey}`}
+                  className="absolute -bottom-6 right-0 px-2 py-0.5 rounded-md bg-rose-600 text-white font-display font-black text-[11px] tabular-nums shadow-lg whitespace-nowrap pointer-events-none animate-penalty-pop z-50"
+                >
+                  +5.0s
+                </div>
+              )}
+            </div>
           )}
 
           <button
             type="button"
             onClick={toggleMute}
-            className="min-h-8 min-w-8 px-2 rounded-lg bg-zinc-100 border border-zinc-200 text-zinc-700 hover:bg-zinc-200 transition flex items-center justify-center cursor-pointer keycap-btn"
+            className="min-h-8 min-w-8 px-2 rounded-xl bg-white border border-zinc-300 text-zinc-700 hover:bg-zinc-50 transition flex items-center justify-center cursor-pointer keycap-btn"
             aria-label={isMuted ? '音声をオンにする' : '音声をミュートする'}
             title={isMuted ? 'ミュート解除' : 'ミュート'}
           >
             {isMuted ? (
               <VolumeX className="w-3.5 h-3.5 text-rose-500" />
             ) : (
-              <Volume2 className="w-3.5 h-3.5 text-blue-600" />
+              <Volume2 className="w-3.5 h-3.5 text-zinc-800" />
             )}
           </button>
 
@@ -1859,7 +2340,7 @@ export default function App() {
               type="button"
               disabled={phase !== 'PLAYING' && phase !== 'READY'}
               onClick={() => triggerPause('MANUAL')}
-              className="min-h-8 min-w-8 px-2 rounded-lg bg-zinc-100 border border-zinc-200 text-zinc-700 hover:bg-zinc-200 disabled:opacity-40 transition flex items-center justify-center cursor-pointer keycap-btn"
+              className="min-h-8 min-w-8 px-2 rounded-xl bg-white border border-zinc-300 text-zinc-700 hover:bg-zinc-50 disabled:opacity-40 transition flex items-center justify-center cursor-pointer keycap-btn"
               aria-label="一時停止"
               title="一時停止"
             >
@@ -1894,112 +2375,144 @@ export default function App() {
 
         {isGameActive && (
           <>
-            {/* 中央ゲームキャンバス領域（余計なガイドバーを排除し最大化） */}
-            <div className="relative w-full flex-1 min-h-0 bg-white rounded-2xl overflow-hidden border border-zinc-200 shadow-xl flex items-center justify-center">
-              <canvas
-                ref={canvasRef}
-                width={CANVAS_WIDTH}
-                height={CANVAS_HEIGHT}
-                onPointerDown={(e) => {
-                  if (phase !== 'PLAYING' && phase !== 'READY') return;
-                  const rect = e.currentTarget.getBoundingClientRect();
-                  updatePaddleFromClientX(e.clientX, rect);
-                }}
-                onPointerMove={(e) => {
-                  if (phase !== 'PLAYING' && phase !== 'READY') return;
-                  if (e.pointerType !== 'mouse' && e.buttons === 0 && e.pressure === 0) return;
-                  const rect = e.currentTarget.getBoundingClientRect();
-                  updatePaddleFromClientX(e.clientX, rect);
-                }}
-                onClick={() => {
-                  if (
-                    phase === 'READY' ||
-                    (phase === 'PLAYING' && ballRef.current.attachedToPaddle)
-                  ) {
-                    launchBallFromPaddle();
-                    setPhase('PLAYING');
-                  }
-                }}
-                className="w-full h-full object-contain block cursor-pointer touch-none"
-              />
+            {/* 中央ゲーム筐体フィールド（Container Queryにより15:16でダークベゼル額縁が完全密着！） */}
+            <div className="arena-viewport w-full flex-1 min-h-0 flex items-center justify-center">
+              <div className="arena-bezel-box relative bg-zinc-900 p-1.5 sm:p-2 rounded-[22px] border border-zinc-800 shadow-[0_14px_32px_-8px_rgba(24,24,27,0.34),inset_0_1px_0_rgba(255,255,255,0.18)] flex items-center justify-center">
+                <div className="relative w-full h-full rounded-[15px] overflow-hidden bg-[#18181b] shadow-inner">
+                  <canvas
+                    ref={canvasRef}
+                    width={CANVAS_WIDTH}
+                    height={CANVAS_HEIGHT}
+                    onPointerDown={(e) => {
+                      if (phase !== 'PLAYING' && phase !== 'READY') return;
+                      const rect = e.currentTarget.getBoundingClientRect();
+                      updatePaddleFromClientX(e.clientX, rect);
+                    }}
+                    onPointerMove={(e) => {
+                      if (phase !== 'PLAYING' && phase !== 'READY') return;
+                      if (e.pointerType !== 'mouse' && e.buttons === 0 && e.pressure === 0) return;
+                      const rect = e.currentTarget.getBoundingClientRect();
+                      updatePaddleFromClientX(e.clientX, rect);
+                    }}
+                    onClick={() => {
+                      if (
+                        phase === 'READY' ||
+                        (phase === 'PLAYING' && ballRef.current.attachedToPaddle)
+                      ) {
+                        launchBallFromPaddle();
+                        setPhase('PLAYING');
+                      }
+                    }}
+                    className="w-full h-full block cursor-pointer touch-none"
+                  />
 
-              {/* ステージ開始コール（1秒でスッと消えるアーケード演出） */}
-              {stageIntroBanner && (
-                <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-20">
-                  <div className="px-8 py-3 rounded-2xl bg-zinc-950/85 border border-white/20 text-white font-display font-black text-3xl tracking-widest shadow-2xl backdrop-blur-md animate-in fade-in zoom-in-95 duration-200">
-                    {stageIntroBanner}
-                  </div>
-                </div>
-              )}
-
-              {/* 落球時の3, 2, 1クイックリスタートオーバーレイ（時間は経過するタイムロス制） */}
-              {dropPenaltyCountdown !== null && (
-                <div className="absolute inset-0 bg-zinc-950/60 backdrop-blur-xs flex flex-col items-center justify-center z-20 pointer-events-none">
-                  <div className="text-xs font-display font-extrabold text-rose-400 uppercase tracking-widest mb-1">
-                    MISS! RESTART IN
-                  </div>
-                  <div className="text-6xl font-black text-white font-display tabular-nums drop-shadow-xl animate-in zoom-in-75 duration-150">
-                    {dropPenaltyCountdown}
-                  </div>
-                </div>
-              )}
-
-              {/* 発射待機時のスマートガイド（パドル操作の邪魔をしない中央配置） */}
-              {(phase === 'READY' ||
-                (phase === 'PLAYING' && ballRef.current.attachedToPaddle)) &&
-                dropPenaltyCountdown === null && (
-                  <div className="absolute top-[62%] inset-x-0 flex flex-col items-center pointer-events-none z-10">
-                    <div className="px-3.5 py-1 rounded-full bg-zinc-900/75 text-white text-[11px] font-display font-medium backdrop-blur-xs shadow-sm flex items-center gap-1.5 opacity-90 transition animate-pulse">
-                      <Play className="w-2.5 h-2.5 fill-current text-sky-300" />
-                      <span>画面をタップしてスタート</span>
+                  {/* ステージ開始コール（アーケード演出） */}
+                  {stageIntroBanner && (
+                    <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-20">
+                      <div className="px-7 py-2.5 rounded-2xl bg-zinc-950/90 border-2 border-amber-400/70 text-white font-display font-black text-2xl sm:text-3xl tracking-widest shadow-[0_12px_30px_rgba(0,0,0,0.5)] backdrop-blur-md animate-in fade-in zoom-in-95 duration-200">
+                        <span className="text-amber-300">{stageIntroBanner}</span>
+                      </div>
                     </div>
-                  </div>
-                )}
+                  )}
 
-              {/* カウントダウンオーバーレイ */}
-              {phase === 'COUNTDOWN' && (
-                <div className="absolute inset-0 bg-white/75 backdrop-blur-sm flex flex-col items-center justify-center z-20">
-                  <div className="text-xs font-semibold text-blue-600 mb-1">再開まで</div>
-                  <div className="text-5xl font-extrabold text-zinc-900 font-display tabular-nums">
-                    {countdownValue}
-                  </div>
-                </div>
-              )}
+                  {/* ステージ正解クリア時の極印スタンプ（原画右上コーナーにドンッと刻印！） */}
+                  {phase === 'STAGE_RESULT' &&
+                    currentStageRecord &&
+                    (currentStageRecord.resolutionType === 'NORMAL_CORRECT' ||
+                      currentStageRecord.resolutionType === 'LAST_CHANCE_CORRECT') && (
+                      <div className="absolute top-3.5 right-3.5 pointer-events-none z-20 animate-stamp-slam">
+                        <div
+                          className={`px-3 py-1 rounded-xl border-2 font-display font-black text-xs sm:text-sm tracking-wider shadow-xl flex items-center gap-1 ${
+                            currentStageRecord.speedRank === 'S'
+                              ? 'bg-amber-400/95 border-amber-950 text-amber-950'
+                              : 'bg-emerald-500/95 border-white text-white'
+                          }`}
+                        >
+                          <Trophy className="w-3.5 h-3.5 shrink-0" />
+                          <span>
+                            {currentStageRecord.speedRank === 'S' ? 'EXCELLENT!' : 'CLEAR!'}
+                          </span>
+                        </div>
+                      </div>
+                    )}
 
-              {/* 一時停止オーバーレイ */}
-              {phase === 'PAUSED' && (
-                <div className="absolute inset-0 bg-white/85 backdrop-blur-sm flex flex-col items-center justify-center p-4 z-20">
-                  <div className="w-full max-w-xs bg-white border border-zinc-200 rounded-2xl p-4 text-center space-y-3 shadow-2xl">
-                    <h3 className="text-base font-bold text-zinc-900">一時停止</h3>
-                    <p className="text-xs text-zinc-500">
-                      {pauseReason === 'TAB_HIDDEN' && 'タブが非表示になったため一時停止しました。'}
-                      {pauseReason === 'WINDOW_BLUR' && 'フォーカスが外れたため一時停止しました。'}
-                      {pauseReason === 'ORIENTATION' && '画面の向きが変わったため一時停止しました。'}
-                      {pauseReason === 'MANUAL' && 'ゲームを一時停止しています。'}
-                    </p>
-                    <div className="flex flex-col gap-2 pt-1">
-                      <button
-                        type="button"
-                        onClick={requestResumeFromPause}
-                        className="w-full min-h-10 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-white font-bold text-xs transition cursor-pointer shadow-sm keycap-btn"
-                      >
-                        プレイを再開
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setPhase('TITLE')}
-                        className="w-full min-h-9 rounded-xl bg-zinc-100 hover:bg-zinc-200 text-zinc-700 text-xs font-medium border border-zinc-200 transition cursor-pointer keycap-btn"
-                      >
-                        ホームへ戻る
-                      </button>
+                  {/* 落球時の3, 2, 1クイックリスタートオーバーレイ */}
+                  {dropPenaltyCountdown !== null && (
+                    <div className="absolute inset-0 bg-zinc-950/65 backdrop-blur-xs flex flex-col items-center justify-center z-20 pointer-events-none">
+                      <div className="px-3 py-0.5 rounded-full bg-rose-500/20 border border-rose-400/50 text-[11px] font-display font-black text-rose-300 uppercase tracking-widest mb-2">
+                        BALL OUT · RESTART IN
+                      </div>
+                      <div className="text-6xl font-black text-white font-display tabular-nums drop-shadow-[0_4px_16px_rgba(0,0,0,0.6)] animate-in zoom-in-75 duration-150">
+                        {dropPenaltyCountdown}
+                      </div>
                     </div>
-                  </div>
+                  )}
+
+                  {/* 発射待機時のスマートガイド */}
+                  {(phase === 'READY' ||
+                    (phase === 'PLAYING' && ballRef.current.attachedToPaddle)) &&
+                    dropPenaltyCountdown === null && (
+                      <div className="absolute top-[63%] inset-x-0 flex flex-col items-center pointer-events-none z-10">
+                        <div className="px-4 py-1.5 rounded-full bg-zinc-900/85 border border-white/15 text-white text-xs font-display font-bold backdrop-blur-xs shadow-lg flex items-center gap-1.5 animate-pulse">
+                          <Play className="w-3 h-3 fill-current text-amber-300" />
+                          <span>画面をタップして発射</span>
+                        </div>
+                      </div>
+                    )}
+
+                  {/* 再開カウントダウン ＆ 誤答+5秒ペナルティ強制送還オーバーレイ */}
+                  {phase === 'COUNTDOWN' && dropPenaltyCountdown === null && (
+                    <div className="absolute inset-0 bg-zinc-950/65 backdrop-blur-xs flex flex-col items-center justify-center z-20 p-4 pointer-events-none">
+                      {wrongPenaltyBanner && (
+                        <div className="mb-3 px-4 py-1.5 rounded-xl bg-rose-600 border-2 border-rose-300 text-white font-display font-black text-xs sm:text-sm tracking-wide shadow-[0_8px_24px_rgba(225,29,72,0.55)] animate-penalty-shake">
+                          ✕ {wrongPenaltyBanner}
+                        </div>
+                      )}
+                      <div className="text-[11px] font-display font-extrabold text-amber-300 uppercase tracking-widest mb-1">
+                        再開まで
+                      </div>
+                      <div className="text-6xl font-black text-white font-display tabular-nums drop-shadow-[0_4px_16px_rgba(0,0,0,0.6)]">
+                        {countdownValue}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* 一時停止オーバーレイ */}
+                  {phase === 'PAUSED' && (
+                    <div className="absolute inset-0 bg-zinc-950/70 backdrop-blur-sm flex flex-col items-center justify-center p-4 z-20">
+                      <div className="w-full max-w-xs bg-[#f6f5f1] border-2 border-zinc-300 rounded-3xl p-4 text-center space-y-3 shadow-2xl">
+                        <h3 className="text-base font-black text-zinc-900">PAUSE</h3>
+                        <p className="text-xs text-zinc-600 font-medium">
+                          {pauseReason === 'TAB_HIDDEN' && 'タブが非表示になったため一時停止しました。'}
+                          {pauseReason === 'WINDOW_BLUR' && 'フォーカスが外れたため一時停止しました。'}
+                          {pauseReason === 'ORIENTATION' && '画面の向きが変わったため一時停止しました。'}
+                          {pauseReason === 'MANUAL' && 'ゲームを一時停止しています。'}
+                        </p>
+                        <div className="flex flex-col gap-2 pt-1">
+                          <button
+                            type="button"
+                            onClick={requestResumeFromPause}
+                            className="w-full min-h-11 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-white font-extrabold text-xs cursor-pointer keycap-dark"
+                          >
+                            プレイを再開
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setPhase('TITLE')}
+                            className="w-full min-h-10 rounded-xl bg-white hover:bg-zinc-50 text-zinc-700 text-xs font-bold border border-zinc-300 transition cursor-pointer keycap-btn"
+                          >
+                            ホームへ戻る
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  )}
                 </div>
-              )}
+              </div>
             </div>
 
-            {/* 下部コントロールバー / ドロワー */}
-            <div className="w-full shrink-0">
+            {/* 下部コントロールバー / アーケード回答ドック / 早押しブザーボタン */}
+            <div className="w-full shrink-0 pb-0.5">
               {(phase === 'ANSWERING' || phase === 'LAST_CHANCE') && (
                 <AnswerDock
                   phase={phase}
@@ -2037,19 +2550,34 @@ export default function App() {
                   type="button"
                   disabled={phase !== 'PLAYING' && phase !== 'READY'}
                   onClick={handleOpenAnswerModal}
-                  className={`w-full min-h-12 px-6 rounded-2xl active:scale-[0.99] disabled:opacity-40 font-bold text-sm sm:text-base shadow-md transition flex items-center justify-center gap-2.5 cursor-pointer keycap-btn ${
+                  className={`w-full min-h-13 px-5 rounded-2xl disabled:opacity-40 font-black text-sm sm:text-base flex items-center justify-between gap-2 cursor-pointer select-none ${
                     hasCluesRevealed
-                      ? 'bg-gradient-to-r from-emerald-600 via-emerald-500 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white shadow-emerald-600/30 ring-2 ring-emerald-400/50'
-                      : 'bg-zinc-900 hover:bg-zinc-800 text-white shadow-zinc-900/20'
+                      ? 'buzzer-ready bg-gradient-to-b from-rose-500 to-rose-600 text-white border border-rose-400/60'
+                      : 'buzzer-standby bg-gradient-to-b from-zinc-800 to-zinc-900 hover:from-zinc-700 hover:to-zinc-850 text-white border border-zinc-700'
                   }`}
-                  title="何の写真か分かった瞬間にタップ！（Enterキーでも即座に開けます）"
+                  title="何の写真か分かった瞬間に早押し！（Enterキーでも即座に開けます）"
                 >
-                  <span className="text-lg">💡</span>
-                  <span>何の写真か回答する</span>
-                  <span className="font-display tabular-nums text-xs sm:text-sm font-extrabold bg-white/20 px-2.5 py-0.5 rounded-lg backdrop-blur-xs">
-                    +{stageMetrics.potentialNormalScore} pt
-                  </span>
-                  <span className="text-[11px] text-zinc-300 font-display font-medium hidden sm:inline">[Enter]</span>
+                  <div className="flex items-center gap-2">
+                    <span
+                      className={`w-7 h-7 rounded-full flex items-center justify-center shrink-0 shadow-inner ${
+                        hasCluesRevealed
+                          ? 'bg-white text-rose-600'
+                          : 'bg-amber-400/20 text-amber-300 border border-amber-400/40'
+                      }`}
+                    >
+                      <Zap className="w-4 h-4 fill-current" />
+                    </span>
+                    <span className="tracking-tight">何の写真か回答する</span>
+                  </div>
+
+                  <div className="flex items-center gap-2 shrink-0">
+                    <span className="font-display tabular-nums text-xs sm:text-sm font-black bg-black/25 border border-white/15 px-2.5 py-0.5 rounded-lg">
+                      +{stageMetrics.potentialNormalScore}pt
+                    </span>
+                    <span className="text-[10px] text-white/70 font-display font-bold hidden sm:inline">
+                      [Enter]
+                    </span>
+                  </div>
                 </button>
               )}
             </div>

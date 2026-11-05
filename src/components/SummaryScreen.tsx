@@ -70,33 +70,35 @@ export const SummaryScreen: React.FC<SummaryScreenProps> = ({
   const clearPercent = Math.round((clearedStagesCount / Math.max(1, activeStages.length)) * 100);
 
   return (
-    <div className="w-full h-full flex flex-col bg-white border border-zinc-200/90 rounded-3xl p-3.5 sm:p-5 shadow-xl backdrop-blur-md overflow-hidden text-zinc-900">
-      {/* 売り物クオリティのリザルトヘッダー */}
-      <div className="flex items-center justify-between border-b border-zinc-100 pb-3 shrink-0">
+    <div className="w-full h-full flex flex-col bg-[#f6f5f1] border-2 border-zinc-300/90 rounded-[26px] p-3.5 sm:p-5 shadow-[0_12px_32px_rgba(24,24,27,0.14),inset_0_1.5px_0_#ffffff] overflow-hidden text-zinc-900">
+      {/* アーケード・トータルリザルト計器ヘッダー */}
+      <div className="flex items-center justify-between gap-3 border-b border-zinc-200/90 pb-3 shrink-0">
         <div>
-          <div className="flex items-center gap-1.5 text-[10px] font-display font-extrabold uppercase tracking-widest text-blue-600">
-            <Trophy className="w-3 h-3 text-amber-500 fill-amber-500" />
+          <div className="flex items-center gap-1.5 text-[10px] font-display font-black uppercase tracking-widest text-amber-700">
+            <Trophy className="w-3.5 h-3.5 text-amber-500 fill-amber-400" />
             <span>TOTAL RESULT</span>
           </div>
-          <h2 className="text-xl sm:text-2xl font-extrabold text-zinc-900 tracking-tight mt-0.5">
+          <h2 className="text-xl sm:text-2xl font-black text-zinc-900 tracking-tight mt-0.5">
             トータルリザルト
           </h2>
-          <div className="flex items-center gap-2 text-xs text-zinc-500 mt-1 font-display tabular-nums">
-            <span className="flex items-center gap-1 text-blue-600 font-bold text-sm">
-              <Timer className="w-4 h-4" />
+          <div className="flex items-center gap-2 text-xs text-zinc-600 mt-1 font-display tabular-nums">
+            <span className="inline-flex items-center gap-1 bg-zinc-900 text-amber-300 px-2.5 py-0.5 rounded-lg font-black text-xs shadow-inner">
+              <Timer className="w-3.5 h-3.5" />
               {totalElapsedSec.toFixed(1)}s
             </span>
-            <span aria-hidden="true" className="text-zinc-300">·</span>
-            <span className="font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200/80 px-2 py-0.5 rounded-full text-[11px]">
+            <span className="font-bold text-emerald-800 bg-emerald-100 border border-emerald-300 px-2 py-0.5 rounded-lg text-[11px]">
               {clearedStagesCount === activeStages.length ? '全問完全クリア！' : `クリア ${clearedStagesCount}/${activeStages.length}`}
             </span>
           </div>
         </div>
 
-        <div className="text-right">
-          <div className="text-[10px] text-zinc-400 font-display font-medium">全{activeStages.length}ステージ合計</div>
-          <div className="text-2xl sm:text-3xl font-extrabold text-blue-600 font-display tabular-nums tracking-tight">
-            {officialTotalScore} <span className="text-xs font-normal text-zinc-500">pt</span>
+        <div className="bg-zinc-900 text-white border border-zinc-800 rounded-2xl px-3.5 py-2 text-right shadow-inner shrink-0">
+          <div className="text-[9px] text-zinc-400 font-display font-bold uppercase tracking-wider">
+            TOTAL SCORE
+          </div>
+          <div className="text-2xl sm:text-3xl font-black text-amber-300 font-display tabular-nums tracking-tight leading-tight">
+            {officialTotalScore}
+            <span className="text-xs font-semibold text-zinc-400 ml-1">pt</span>
           </div>
         </div>
       </div>
@@ -147,16 +149,16 @@ export const SummaryScreen: React.FC<SummaryScreenProps> = ({
                             </span>
                           )}
                         </div>
-                        {/* 2段目: ステージ番号 ＋ タイム/ステータス */}
+                        {/* 2段目: ステージ番号 ＋ タイム/ステータス（文字切れゼロの明快表記） */}
                         <div className="flex items-center gap-1.5 text-[11px] text-zinc-500 font-display tabular-nums truncate">
                           <span className="font-semibold text-zinc-600 whitespace-nowrap">
                             {st.title}
                           </span>
                           <span aria-hidden="true" className="text-zinc-300">·</span>
-                          <span className="truncate">
+                          <span className="font-semibold text-zinc-700 whitespace-nowrap">
                             {rec
                               ? isCleared
-                                ? `${rec.elapsedSec.toFixed(1)}秒 (+${rec.speedBonus}pt)`
+                                ? `${rec.elapsedSec.toFixed(1)}s`
                                 : '未正解'
                               : '未プレイ'}
                           </span>
@@ -187,19 +189,19 @@ export const SummaryScreen: React.FC<SummaryScreenProps> = ({
       </div>
 
       {/* フッターアクションバー */}
-      <div className="flex gap-2 pt-2 border-t border-zinc-100 shrink-0">
+      <div className="flex gap-2 pt-2 border-t border-zinc-200/90 shrink-0 pb-0.5">
         <button
           type="button"
           onClick={onRestartAll}
-          className="flex-1 min-h-11 py-2 rounded-2xl bg-zinc-900 hover:bg-zinc-800 text-white font-bold text-sm transition flex items-center justify-center gap-2 cursor-pointer whitespace-nowrap shadow-md keycap-btn"
+          className="flex-1 min-h-11 py-2 rounded-2xl bg-gradient-to-b from-zinc-800 to-zinc-950 hover:from-zinc-750 hover:to-zinc-900 text-white font-black text-sm flex items-center justify-center gap-2 cursor-pointer whitespace-nowrap keycap-dark"
         >
-          <RotateCcw className="w-4 h-4" />
+          <RotateCcw className="w-4 h-4 text-amber-300" />
           <span>最初からタイムアタック</span>
         </button>
         <button
           type="button"
           onClick={onBackToTitle}
-          className="min-h-11 px-4 py-2 rounded-2xl bg-zinc-100 hover:bg-zinc-200 text-zinc-700 font-semibold text-sm border border-zinc-200 transition flex items-center gap-1.5 cursor-pointer whitespace-nowrap keycap-btn"
+          className="min-h-11 px-4 py-2 rounded-2xl bg-white hover:bg-zinc-50 text-zinc-700 font-bold text-sm border border-zinc-300 transition flex items-center gap-1.5 cursor-pointer whitespace-nowrap keycap-btn"
         >
           <Home className="w-4 h-4" />
           <span>ホームへ</span>

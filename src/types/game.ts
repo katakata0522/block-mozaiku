@@ -177,6 +177,11 @@ export interface HitParticle {
   alpha: number;
   size: number;
   isSquare?: boolean;
+  gravity?: number;
+  rotation?: number;
+  vRot?: number;
+  aspectRatio?: number;
+  decayRate?: number;
 }
 
 export interface FloatingFeedback {
