@@ -1,5 +1,5 @@
 import React, { useEffect, useRef } from 'react';
-import { RotateCcw, Timer } from 'lucide-react';
+import { RotateCcw, Timer, Trophy, Home } from 'lucide-react';
 import { PuzzleStage, renderStageArtworkToCanvas, preloadStagePhotos } from '../data/puzzles';
 import { StageScoreRecord } from '../types/game';
 
@@ -34,7 +34,7 @@ const StageThumbnail: React.FC<{ stage: PuzzleStage }> = ({ stage }) => {
   }, [stage.id]);
 
   return (
-    <div className="w-14 h-11 rounded-xl overflow-hidden bg-zinc-100 border border-zinc-200 shrink-0">
+    <div className="w-14 h-11 rounded-xl overflow-hidden bg-zinc-100 border border-zinc-200/90 shrink-0 shadow-xs">
       <canvas
         ref={canvasRef}
         width={112}
@@ -67,36 +67,46 @@ export const SummaryScreen: React.FC<SummaryScreenProps> = ({
     );
   }).length;
 
+  const clearPercent = Math.round((clearedStagesCount / Math.max(1, activeStages.length)) * 100);
+
   return (
-    <div className="w-full h-full flex flex-col bg-white/95 border border-zinc-200 rounded-3xl p-4 sm:p-6 shadow-2xl backdrop-blur-md overflow-hidden text-zinc-900">
-      <div className="flex items-center justify-between border-b border-zinc-200 pb-3">
+    <div className="w-full h-full flex flex-col bg-white border border-zinc-200/90 rounded-3xl p-3.5 sm:p-5 shadow-xl backdrop-blur-md overflow-hidden text-zinc-900">
+      {/* 売り物クオリティのリザルトヘッダー */}
+      <div className="flex items-center justify-between border-b border-zinc-100 pb-3 shrink-0">
         <div>
-          <div className="text-[11px] font-semibold uppercase tracking-widest text-blue-600">
-            SPEED &amp; SCORE RESULT
+          <div className="flex items-center gap-1.5 text-[10px] font-display font-extrabold uppercase tracking-widest text-blue-600">
+            <Trophy className="w-3 h-3 text-amber-500 fill-amber-500" />
+            <span>TOTAL RESULT</span>
           </div>
-          <h2 className="text-xl font-bold text-zinc-900 mt-0.5">トータルリザルト</h2>
-          <div className="flex items-center gap-2 text-xs text-zinc-600 mt-1 font-mono tabular-nums">
-            <span className="flex items-center gap-1 text-blue-600 font-semibold">
+          <h2 className="text-xl sm:text-2xl font-extrabold text-zinc-900 tracking-tight mt-0.5">
+            トータルリザルト
+          </h2>
+          <div className="flex items-center gap-2 text-xs text-zinc-500 mt-1 font-display tabular-nums">
+            <span className="flex items-center gap-1 text-blue-600 font-bold">
               <Timer className="w-3.5 h-3.5" />
-              合計タイム {totalElapsedSec.toFixed(1)}s
+              {totalElapsedSec.toFixed(1)}s
             </span>
-            <span aria-hidden="true" className="text-zinc-300">
-              ·
+            <span aria-hidden="true" className="text-zinc-300">·</span>
+            <span className="text-zinc-600">
+              目標 {totalRivalTargetSec.toFixed(1)}s
             </span>
-            <span className="text-zinc-500">
-              目標合計 {totalRivalTargetSec.toFixed(1)}s（クリア {clearedStagesCount}/{activeStages.length}）
+            <span aria-hidden="true" className="text-zinc-300">·</span>
+            <span className="font-semibold text-emerald-700 bg-emerald-50 px-1.5 py-0.2 rounded text-[11px]">
+              クリア {clearedStagesCount}/{activeStages.length}（{clearPercent}%）
             </span>
           </div>
         </div>
+
         <div className="text-right">
-          <div className="text-[11px] text-zinc-500">全{activeStages.length}ステージ合計</div>
-          <div className="text-2xl font-extrabold text-blue-600 font-mono tabular-nums">
-            {officialTotalScore} <span className="text-sm font-normal text-zinc-600">pt</span>
+          <div className="text-[10px] text-zinc-400 font-display font-medium">全{activeStages.length}ステージ合計</div>
+          <div className="text-2xl sm:text-3xl font-extrabold text-blue-600 font-display tabular-nums tracking-tight">
+            {officialTotalScore} <span className="text-xs font-normal text-zinc-500">pt</span>
           </div>
         </div>
       </div>
 
-      <div className="flex-1 min-h-0 overflow-y-auto py-2 pr-1 space-y-2.5">
+      {/* ステージ別成績一覧 */}
+      <div className="flex-1 min-h-0 overflow-y-auto py-2 pr-1 space-y-2 custom-scrollbar">
         {activeStages.map((st, idx) => {
           const rec = stageRecords[st.id];
           const isCleared =
@@ -106,24 +116,24 @@ export const SummaryScreen: React.FC<SummaryScreenProps> = ({
           return (
             <div
               key={st.id}
-              className="bg-zinc-50 border border-zinc-200 rounded-2xl p-3 flex items-center justify-between gap-3 shadow-xs"
+              className="bg-zinc-50/80 hover:bg-zinc-100/70 border border-zinc-200/80 rounded-2xl p-2.5 sm:p-3 flex items-center justify-between gap-3 shadow-xs transition"
             >
               <div className="flex items-center gap-3 min-w-0">
                 <StageThumbnail stage={st} />
                 <div className="min-w-0">
                   <div className="flex items-center gap-2 text-xs text-zinc-500">
-                    <span className="font-mono font-semibold text-zinc-700">{st.title}</span>
-                    <span aria-hidden="true">·</span>
+                    <span className="font-display font-bold text-zinc-700">{st.title}</span>
+                    <span aria-hidden="true" className="text-zinc-300">·</span>
                     <span className="text-sm font-bold text-zinc-900 truncate">
                       {st.displayAnswer}
                     </span>
                     {rec && (
                       <span
-                        className={`px-1.5 py-0.5 rounded text-[10px] font-mono font-bold ${
+                        className={`px-1.5 py-0.2 rounded text-[10px] font-display font-bold shadow-xs ${
                           rec.speedRank === 'S'
-                            ? 'bg-amber-100 text-amber-800 border border-amber-300'
+                            ? 'bg-amber-100 text-amber-900 border border-amber-300 font-extrabold'
                             : rec.speedRank === 'A'
-                            ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
+                            ? 'bg-emerald-100 text-emerald-900 border border-emerald-300 font-bold'
                             : 'bg-zinc-100 text-zinc-700 border border-zinc-200'
                         }`}
                       >
@@ -131,7 +141,7 @@ export const SummaryScreen: React.FC<SummaryScreenProps> = ({
                       </span>
                     )}
                   </div>
-                  <p className="text-xs text-zinc-500 mt-0.5 truncate font-mono tabular-nums">
+                  <p className="text-xs text-zinc-500 mt-0.5 truncate font-display tabular-nums">
                     {rec
                       ? isCleared
                         ? `タイム ${rec.elapsedSec.toFixed(1)}s（目標 ${st.rivalTargetSec.toFixed(1)}s） · 残モザイク ${rec.mosaicPercent}%`
@@ -143,14 +153,14 @@ export const SummaryScreen: React.FC<SummaryScreenProps> = ({
 
               <div className="flex items-center gap-2.5 shrink-0">
                 <div className="text-right">
-                  <div className="text-sm font-bold font-mono tabular-nums text-blue-600">
+                  <div className="text-sm font-bold font-display tabular-nums text-blue-600">
                     {rec ? `${rec.score} pt` : '—'}
                   </div>
                 </div>
                 <button
                   type="button"
                   onClick={() => onPracticeStage(idx)}
-                  className="min-h-9 px-3 rounded-xl bg-zinc-100 hover:bg-zinc-200 text-xs font-medium text-zinc-700 border border-zinc-200 transition cursor-pointer whitespace-nowrap"
+                  className="min-h-8 px-3 rounded-xl bg-white hover:bg-zinc-100 text-xs font-semibold text-zinc-700 border border-zinc-200/90 transition cursor-pointer whitespace-nowrap keycap-btn"
                 >
                   再挑戦
                 </button>
@@ -160,11 +170,12 @@ export const SummaryScreen: React.FC<SummaryScreenProps> = ({
         })}
       </div>
 
-      <div className="flex gap-2.5 pt-2">
+      {/* フッターアクションバー */}
+      <div className="flex gap-2 pt-2 border-t border-zinc-100 shrink-0">
         <button
           type="button"
           onClick={onRestartAll}
-          className="flex-1 min-h-12 py-2.5 rounded-2xl bg-zinc-900 hover:bg-zinc-800 text-white font-bold text-sm transition flex items-center justify-center gap-2 cursor-pointer whitespace-nowrap shadow-sm"
+          className="flex-1 min-h-11 py-2 rounded-2xl bg-zinc-900 hover:bg-zinc-800 text-white font-bold text-sm transition flex items-center justify-center gap-2 cursor-pointer whitespace-nowrap shadow-md keycap-btn"
         >
           <RotateCcw className="w-4 h-4" />
           <span>最初からタイムアタック</span>
@@ -172,9 +183,10 @@ export const SummaryScreen: React.FC<SummaryScreenProps> = ({
         <button
           type="button"
           onClick={onBackToTitle}
-          className="min-h-12 px-5 py-2.5 rounded-2xl bg-zinc-100 hover:bg-zinc-200 text-zinc-700 font-medium text-sm border border-zinc-200 transition cursor-pointer whitespace-nowrap"
+          className="min-h-11 px-4 py-2 rounded-2xl bg-zinc-100 hover:bg-zinc-200 text-zinc-700 font-semibold text-sm border border-zinc-200 transition flex items-center gap-1.5 cursor-pointer whitespace-nowrap keycap-btn"
         >
-          ホームへ
+          <Home className="w-4 h-4" />
+          <span>ホームへ</span>
         </button>
       </div>
     </div>

@@ -58,6 +58,7 @@ import {
 import { TitleScreen } from './components/TitleScreen';
 import { SummaryScreen } from './components/SummaryScreen';
 import { AnswerDock, StageResultDock } from './components/GameModalsAndDocks';
+import { BrandLogo } from './components/BrandLogo';
 import { soundEngine } from './utils/sound';
 
 function traceRoundedRect(
@@ -1639,39 +1640,49 @@ export default function App() {
 
   return (
     <div className="h-dvh w-full bg-zinc-100 text-zinc-900 flex flex-col items-center justify-between select-none overflow-hidden">
-      {/* クリーンなトップステータスバー（1行完結） */}
-      <header className="w-full max-w-xl h-12 px-3 flex items-center justify-between border-b border-zinc-200 bg-white/90 backdrop-blur-md shrink-0 shadow-xs">
+      {/* クリーンなトップステータスバー（1行完結・ストアフロント基準） */}
+      <header className="w-full max-w-xl h-12 px-3 flex items-center justify-between border-b border-zinc-200/90 bg-white/95 backdrop-blur-md shrink-0 shadow-xs">
         <div className="flex items-center gap-2 min-w-0">
           {isGameActive ? (
             <button
               type="button"
               onClick={() => setPhase('TITLE')}
-              className="min-h-8 min-w-8 px-2 rounded-lg bg-zinc-100 hover:bg-zinc-200 text-zinc-700 border border-zinc-200 flex items-center justify-center transition cursor-pointer"
+              className="min-h-8 min-w-8 px-2 rounded-lg bg-zinc-100 hover:bg-zinc-200 text-zinc-700 border border-zinc-200 flex items-center justify-center transition cursor-pointer keycap-btn"
               title="ホームへ戻る"
               aria-label="ホームへ戻る"
             >
               <Home className="w-3.5 h-3.5" />
             </button>
           ) : (
-            <span className="w-2 h-2 rounded-full bg-blue-600 shrink-0" />
+            <BrandLogo size={20} />
           )}
 
           {isGameActive ? (
             <div className="flex items-center gap-2 text-xs font-medium text-zinc-700 truncate">
-              <span className="font-mono font-bold text-zinc-900 whitespace-nowrap">
+              <span className="font-display font-bold text-zinc-900 bg-zinc-100 border border-zinc-200/90 px-1.5 py-0.5 rounded-md text-[11px] whitespace-nowrap">
                 STAGE {currentStageIndex + 1}/{activeStages.length}
               </span>
               <span aria-hidden="true" className="text-zinc-300">
                 ·
               </span>
-              <span className="font-mono tabular-nums text-blue-600 font-bold whitespace-nowrap">
-                モザイク {stageMetrics.mosaicPercent}%
-              </span>
+              <div className="flex items-center gap-1 font-display font-bold whitespace-nowrap text-[11px]">
+                <span
+                  className={`w-1.5 h-1.5 rounded-full ${
+                    stageMetrics.mosaicPercent <= 30
+                      ? 'bg-emerald-500 animate-pulse'
+                      : stageMetrics.mosaicPercent <= 60
+                      ? 'bg-amber-500'
+                      : 'bg-blue-500'
+                  }`}
+                />
+                <span className="text-zinc-500 font-normal">残</span>
+                <span className="tabular-nums text-zinc-900">{stageMetrics.mosaicPercent}%</span>
+              </div>
               <span aria-hidden="true" className="text-zinc-300 hidden sm:inline">
                 ·
               </span>
               <span
-                className="font-mono tabular-nums text-emerald-700 whitespace-nowrap hidden sm:inline-flex items-center gap-1 font-semibold"
+                className="font-display tabular-nums text-emerald-700 whitespace-nowrap hidden sm:inline-flex items-center gap-1 font-semibold text-[11px]"
                 title={`ライバル目標タイム: ${currentStage.rivalTargetSec.toFixed(1)}s`}
               >
                 <Timer className="w-3 h-3" />
@@ -1681,9 +1692,14 @@ export default function App() {
               </span>
             </div>
           ) : (
-            <span className="text-sm font-bold tracking-tight text-zinc-900 truncate">
-              モザイクブレイク
-            </span>
+            <div className="flex items-center gap-1.5 min-w-0">
+              <span className="font-display text-xs sm:text-sm font-extrabold tracking-tight text-zinc-900 truncate">
+                MOSAIC BREAK
+              </span>
+              <span className="text-[11px] text-zinc-400 font-medium hidden sm:inline">
+                モザイクブレイク
+              </span>
+            </div>
           )}
         </div>
 
@@ -1697,7 +1713,7 @@ export default function App() {
                     key={idx}
                     className={`w-3.5 h-3.5 transition ${
                       idx < lives
-                        ? 'text-rose-500 fill-rose-500'
+                        ? 'text-rose-500 fill-rose-500 drop-shadow-[0_1px_2px_rgba(244,63,94,0.3)]'
                         : 'text-zinc-300 fill-zinc-200'
                     }`}
                   />
@@ -1708,7 +1724,13 @@ export default function App() {
                 ·
               </span>
 
-              <div className="flex items-center gap-1 text-xs font-mono tabular-nums text-zinc-700">
+              <div
+                className={`flex items-center gap-1 text-xs font-display tabular-nums font-bold ${
+                  !isPracticeMode && remainingSeconds <= 15
+                    ? 'text-rose-600 animate-pulse'
+                    : 'text-zinc-700'
+                }`}
+              >
                 <Clock className="w-3.5 h-3.5 text-blue-500" />
                 <span>{isPracticeMode ? 'FREE' : formatRemainingSeconds(remainingSeconds)}</span>
               </div>
@@ -1716,9 +1738,9 @@ export default function App() {
               <button
                 type="button"
                 onClick={() => setCatchAndAimMode((prev) => !prev)}
-                className={`min-h-8 px-2 rounded-lg text-[11px] font-medium border transition flex items-center gap-1 cursor-pointer whitespace-nowrap ${
+                className={`min-h-8 px-2 rounded-lg text-[11px] font-semibold border transition flex items-center gap-1 cursor-pointer whitespace-nowrap keycap-btn ${
                   catchAndAimMode
-                    ? 'bg-emerald-100 border-emerald-300 text-emerald-800'
+                    ? 'bg-emerald-50 border-emerald-300 text-emerald-800'
                     : 'bg-zinc-100 hover:bg-zinc-200 border-zinc-200 text-zinc-600'
                 }`}
                 title="パドルでボールをキャッチして狙い撃ちするモード"
@@ -1732,7 +1754,7 @@ export default function App() {
           <button
             type="button"
             onClick={toggleMute}
-            className="min-h-8 min-w-8 px-2 rounded-lg bg-zinc-100 border border-zinc-200 text-zinc-700 hover:bg-zinc-200 transition flex items-center justify-center cursor-pointer"
+            className="min-h-8 min-w-8 px-2 rounded-lg bg-zinc-100 border border-zinc-200 text-zinc-700 hover:bg-zinc-200 transition flex items-center justify-center cursor-pointer keycap-btn"
             aria-label={isMuted ? '音声をオンにする' : '音声をミュートする'}
             title={isMuted ? 'ミュート解除' : 'ミュート'}
           >
@@ -1748,7 +1770,7 @@ export default function App() {
               type="button"
               disabled={phase !== 'PLAYING' && phase !== 'READY'}
               onClick={() => triggerPause('MANUAL')}
-              className="min-h-8 min-w-8 px-2 rounded-lg bg-zinc-100 border border-zinc-200 text-zinc-700 hover:bg-zinc-200 disabled:opacity-40 transition flex items-center justify-center cursor-pointer"
+              className="min-h-8 min-w-8 px-2 rounded-lg bg-zinc-100 border border-zinc-200 text-zinc-700 hover:bg-zinc-200 disabled:opacity-40 transition flex items-center justify-center cursor-pointer keycap-btn"
               aria-label="一時停止"
               title="一時停止"
             >
@@ -1785,21 +1807,21 @@ export default function App() {
           <>
             {/* プレイ中のみ表示する進行ガイドバー（回答・結果ドロワー表示時は自動で畳んでキャンバス表示領域を最大化） */}
             {!isDockExpanded && (
-              <div className="w-full px-3 py-1.5 rounded-xl bg-white/95 border border-zinc-200 flex items-center justify-between gap-2 text-xs shrink-0 shadow-xs">
+              <div className="w-full px-3 py-1 rounded-xl bg-white/95 border border-zinc-200/90 flex items-center justify-between gap-2 text-xs shrink-0 shadow-xs">
                 <div className="flex items-center gap-1.5 min-w-0 truncate">
-                  <CheckCircle2
-                    className={`w-3.5 h-3.5 shrink-0 ${
-                      hasCluesRevealed ? 'text-emerald-600' : 'text-blue-500'
+                  <span
+                    className={`w-2 h-2 rounded-full shrink-0 ${
+                      hasCluesRevealed ? 'bg-emerald-500 animate-pulse' : 'bg-blue-500'
                     }`}
                   />
-                  <span className="text-zinc-700 truncate">
+                  <span className="text-zinc-700 truncate font-medium">
                     {hasCluesRevealed
-                      ? '写真の一部が露出中！分かった瞬間に「回答する（Enter）」で早押しクリア！'
-                      : 'クリア条件：3回当てて0%枠を開け、何の写真か分かったら「回答する」'}
+                      ? '写真が露出中！ひらめいたら「💡 回答する」または [Enter] でクリア！'
+                      : '3打で0%枠を開けて原画露出！何の写真か分かったら「回答する」'}
                   </span>
                 </div>
-                <span className="text-[11px] text-zinc-500 whitespace-nowrap shrink-0 hidden sm:inline">
-                  ヒント：{currentStage.categoryLabel}
+                <span className="text-[11px] font-semibold text-zinc-500 whitespace-nowrap shrink-0 hidden sm:inline bg-zinc-100 px-2 py-0.5 rounded-md">
+                  {currentStage.categoryLabel}
                 </span>
               </div>
             )}
@@ -1837,11 +1859,11 @@ export default function App() {
               {(phase === 'READY' ||
                 (phase === 'PLAYING' && ballRef.current.attachedToPaddle)) && (
                 <div className="absolute inset-x-4 bottom-14 pointer-events-none flex flex-col items-center">
-                  <div className="bg-white/95 border border-zinc-200 rounded-2xl px-4 py-2.5 text-center shadow-xl pointer-events-auto backdrop-blur-md">
+                  <div className="bg-white/95 border border-zinc-200/90 rounded-2xl px-4 py-2.5 text-center shadow-xl pointer-events-auto backdrop-blur-md">
                     <div className="text-[11px] text-zinc-600 font-medium">
-                      カテゴリ：<span className="text-zinc-900 font-semibold">{currentStage.categoryLabel}</span>
+                      カテゴリ：<span className="text-zinc-900 font-bold">{currentStage.categoryLabel}</span>
                       <span className="mx-1.5 text-zinc-300">·</span>
-                      <span className="text-amber-600 font-semibold">★枠を割ると周囲も連鎖削り</span>
+                      <span className="text-amber-600 font-bold">★枠破壊で連鎖爆縮！</span>
                     </div>
                     <button
                       type="button"
@@ -1849,10 +1871,10 @@ export default function App() {
                         launchBallFromPaddle();
                         setPhase('PLAYING');
                       }}
-                      className="mt-1.5 min-h-9 px-5 py-1.5 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-white font-bold text-xs shadow-sm transition inline-flex items-center gap-1.5 cursor-pointer whitespace-nowrap"
+                      className="mt-1.5 min-h-9 px-6 py-1.5 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-white font-bold text-xs shadow-md transition inline-flex items-center gap-1.5 cursor-pointer whitespace-nowrap keycap-btn"
                     >
-                      <Play className="w-3.5 h-3.5 fill-current" />
-                      <span>ボールを発射</span>
+                      <Play className="w-3.5 h-3.5 fill-current text-sky-400" />
+                      <span>タップまたは [Space] で発射</span>
                     </button>
                   </div>
                 </div>
@@ -1862,7 +1884,7 @@ export default function App() {
               {phase === 'COUNTDOWN' && (
                 <div className="absolute inset-0 bg-white/75 backdrop-blur-sm flex flex-col items-center justify-center z-20">
                   <div className="text-xs font-semibold text-blue-600 mb-1">再開まで</div>
-                  <div className="text-5xl font-extrabold text-zinc-900 font-mono tabular-nums">
+                  <div className="text-5xl font-extrabold text-zinc-900 font-display tabular-nums">
                     {countdownValue}
                   </div>
                 </div>
@@ -1883,14 +1905,14 @@ export default function App() {
                       <button
                         type="button"
                         onClick={requestResumeFromPause}
-                        className="w-full min-h-10 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-white font-bold text-xs transition cursor-pointer shadow-sm"
+                        className="w-full min-h-10 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-white font-bold text-xs transition cursor-pointer shadow-sm keycap-btn"
                       >
                         プレイを再開
                       </button>
                       <button
                         type="button"
                         onClick={() => setPhase('TITLE')}
-                        className="w-full min-h-9 rounded-xl bg-zinc-100 hover:bg-zinc-200 text-zinc-700 text-xs font-medium border border-zinc-200 transition cursor-pointer"
+                        className="w-full min-h-9 rounded-xl bg-zinc-100 hover:bg-zinc-200 text-zinc-700 text-xs font-medium border border-zinc-200 transition cursor-pointer keycap-btn"
                       >
                         ホームへ戻る
                       </button>
@@ -1955,7 +1977,7 @@ export default function App() {
                     onPointerLeave={() => {
                       buttonHoldRef.current.left = false;
                     }}
-                    className="touch-drag-zone min-w-10 min-h-11 px-2.5 rounded-xl bg-white hover:bg-zinc-100 active:bg-zinc-200 border border-zinc-200 text-zinc-700 flex items-center justify-center disabled:opacity-40 transition cursor-pointer shrink-0 shadow-xs"
+                    className="touch-drag-zone min-w-10 min-h-11 px-2.5 rounded-xl bg-white hover:bg-zinc-100 active:bg-zinc-200 border border-zinc-200 text-zinc-700 flex items-center justify-center disabled:opacity-40 transition cursor-pointer shrink-0 shadow-xs keycap-btn"
                     aria-label="左へ移動"
                     title="左へ移動"
                   >
@@ -1979,7 +2001,7 @@ export default function App() {
                     onPointerLeave={() => {
                       buttonHoldRef.current.right = false;
                     }}
-                    className="touch-drag-zone min-w-10 min-h-11 px-2.5 rounded-xl bg-white hover:bg-zinc-100 active:bg-zinc-200 border border-zinc-200 text-zinc-700 flex items-center justify-center disabled:opacity-40 transition cursor-pointer shrink-0 shadow-xs"
+                    className="touch-drag-zone min-w-10 min-h-11 px-2.5 rounded-xl bg-white hover:bg-zinc-100 active:bg-zinc-200 border border-zinc-200 text-zinc-700 flex items-center justify-center disabled:opacity-40 transition cursor-pointer shrink-0 shadow-xs keycap-btn"
                     aria-label="右へ移動"
                     title="右へ移動"
                   >
@@ -1991,18 +2013,19 @@ export default function App() {
                     type="button"
                     disabled={phase !== 'PLAYING' && phase !== 'READY'}
                     onClick={handleOpenAnswerModal}
-                    className={`flex-1 min-h-11 px-4 rounded-xl active:scale-[0.99] disabled:opacity-40 font-bold text-sm shadow-md transition flex items-center justify-center gap-2 cursor-pointer whitespace-nowrap ${
+                    className={`flex-1 min-h-11 px-4 rounded-xl active:scale-[0.99] disabled:opacity-40 font-bold text-sm shadow-md transition flex items-center justify-center gap-2 cursor-pointer whitespace-nowrap keycap-btn ${
                       hasCluesRevealed
-                        ? 'bg-emerald-600 hover:bg-emerald-500 text-white shadow-emerald-600/25 ring-2 ring-emerald-400/40'
+                        ? 'bg-gradient-to-r from-emerald-600 via-emerald-500 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white shadow-emerald-600/30 ring-2 ring-emerald-400/50'
                         : 'bg-zinc-900 hover:bg-zinc-800 text-white shadow-zinc-900/20'
                     }`}
                     title="何の写真か分かった瞬間にタップ！（Enterキーでも即座に開けます）"
                   >
                     <span className="text-base">💡</span>
                     <span>何の写真か回答する</span>
-                    <span className="font-mono tabular-nums text-xs bg-white/20 px-1.5 py-0.5 rounded">
-                      +{stageMetrics.potentialNormalScore}
+                    <span className="font-display tabular-nums text-xs font-bold bg-white/20 px-2 py-0.5 rounded-md backdrop-blur-xs">
+                      +{stageMetrics.potentialNormalScore} pt
                     </span>
+                    <span className="text-[10px] text-zinc-300 font-display font-normal hidden sm:inline">[Enter]</span>
                   </button>
                 </div>
               )}

@@ -120,15 +120,15 @@ export const AnswerDock: React.FC<AnswerDockProps> = ({
           </button>
         </div>
 
-        {/* 2段目: 16キーかなパッド（コンパクト＆タップしやすい8列×2行） */}
-        <div className="bg-zinc-50/80 border border-zinc-200/90 rounded-xl p-1 sm:p-1.5 space-y-0.5">
+        {/* 2段目: 16キーかなパッド（触覚的メカニカルキートップ・8列×2行） */}
+        <div className="bg-zinc-100/80 border border-zinc-200/90 rounded-xl p-1 sm:p-1.5 space-y-0.5">
           <div className="grid grid-cols-8 gap-1">
             {currentStage.kanaPad.map((kana, idx) => (
               <button
                 key={`${currentStage.id}-kana-${idx}`}
                 type="button"
                 onClick={() => handleAppendKana(kana)}
-                className="min-h-7 sm:min-h-8 rounded-lg bg-white hover:bg-blue-50 active:bg-blue-600 active:text-white text-zinc-800 font-bold text-xs border border-zinc-200 shadow-xs transition cursor-pointer flex items-center justify-center select-none"
+                className="min-h-7 sm:min-h-8 rounded-lg bg-white hover:bg-zinc-50 active:bg-blue-600 active:text-white text-zinc-900 font-display font-bold text-xs border border-zinc-200/80 keycap-btn flex items-center justify-center select-none cursor-pointer"
               >
                 {kana}
               </button>
@@ -234,11 +234,11 @@ export const StageResultDock: React.FC<StageResultDockProps> = ({
                 タイム {currentStageRecord.elapsedSec.toFixed(1)}s
               </span>
               <span
-                className={`px-1.5 py-0.5 rounded text-[10px] font-mono font-bold ${
+                className={`px-2 py-0.5 rounded-md text-[10px] font-display font-bold shadow-xs ${
                   currentStageRecord.speedRank === 'S'
-                    ? 'bg-amber-100 text-amber-800 border border-amber-300'
+                    ? 'bg-amber-100 text-amber-900 border border-amber-300 font-extrabold'
                     : currentStageRecord.speedRank === 'A'
-                    ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
+                    ? 'bg-emerald-100 text-emerald-900 border border-emerald-300 font-bold'
                     : 'bg-zinc-100 text-zinc-700 border border-zinc-200'
                 }`}
               >
@@ -252,10 +252,10 @@ export const StageResultDock: React.FC<StageResultDockProps> = ({
         </div>
 
         <div className="text-right shrink-0">
-          <div className="text-[10px] text-zinc-500">
+          <div className="text-[10px] text-zinc-500 font-medium">
             {currentStageRecord.isPractice ? 'フリープレイ' : '獲得スコア'}
           </div>
-          <div className="text-xl font-extrabold font-mono tabular-nums text-blue-600">
+          <div className="text-xl font-extrabold font-display tabular-nums text-blue-600">
             +{currentStageRecord.score} <span className="text-xs font-normal text-zinc-600">pt</span>
           </div>
         </div>
@@ -263,7 +263,7 @@ export const StageResultDock: React.FC<StageResultDockProps> = ({
 
       {/* 対戦・早押し用のスコア内訳＆ターゲットタイム比較バー */}
       <div className="bg-zinc-50 border border-zinc-200 rounded-xl px-3 py-1.5 flex flex-wrap items-center justify-between gap-2 text-[11px]">
-        <div className="text-zinc-700 font-mono tabular-nums">
+        <div className="text-zinc-700 font-display tabular-nums">
           {currentStageRecord.resolutionType === 'NORMAL_CORRECT' ? (
             <span>
               内訳: 基本100 + 残モザイク({currentStageRecord.mosaicPercent}%) {currentStageRecord.mosaicBonus} + 早押し {currentStageRecord.speedBonus}
@@ -274,10 +274,10 @@ export const StageResultDock: React.FC<StageResultDockProps> = ({
             </span>
           )}
         </div>
-        <div className="font-mono tabular-nums">
+        <div className="font-display tabular-nums">
           {isCleared ? (
             timeDiffSec >= 0 ? (
-              <span className="text-emerald-700 font-semibold">
+              <span className="text-emerald-700 font-bold">
                 目標 {currentStageRecord.rivalTargetSec.toFixed(1)}s より {timeDiffSec.toFixed(1)}s 早い！
               </span>
             ) : (
@@ -297,7 +297,7 @@ export const StageResultDock: React.FC<StageResultDockProps> = ({
         <button
           type="button"
           onClick={onNextStageOrSummary}
-          className="min-h-10 px-3 py-2 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-white font-bold text-xs sm:text-sm transition flex items-center justify-center gap-1 cursor-pointer whitespace-nowrap shadow-xs"
+          className="min-h-10 px-3 py-2 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-white font-bold text-xs sm:text-sm transition flex items-center justify-center gap-1 cursor-pointer whitespace-nowrap shadow-xs keycap-btn"
         >
           <span>
             {currentStageIndex + 1 < PUZZLE_STAGES.length ? '次のステージへ' : 'トータル結果へ'}
@@ -308,7 +308,7 @@ export const StageResultDock: React.FC<StageResultDockProps> = ({
         <button
           type="button"
           onClick={onRetrySameStagePractice}
-          className="min-h-10 px-2.5 py-2 rounded-xl bg-zinc-100 hover:bg-zinc-200 text-zinc-700 font-medium text-xs border border-zinc-200 transition flex items-center justify-center gap-1 cursor-pointer whitespace-nowrap"
+          className="min-h-10 px-2.5 py-2 rounded-xl bg-zinc-100 hover:bg-zinc-200 text-zinc-700 font-medium text-xs border border-zinc-200 transition flex items-center justify-center gap-1 cursor-pointer whitespace-nowrap keycap-btn"
         >
           <RotateCcw className="w-3.5 h-3.5 shrink-0" />
           <span>もう一度プレイ</span>
@@ -317,7 +317,7 @@ export const StageResultDock: React.FC<StageResultDockProps> = ({
         <button
           type="button"
           onClick={onGoToSummary}
-          className="min-h-10 px-2.5 py-2 rounded-xl bg-zinc-100 hover:bg-zinc-200 text-zinc-700 font-medium text-xs border border-zinc-200 transition flex items-center justify-center gap-1 cursor-pointer whitespace-nowrap"
+          className="min-h-10 px-2.5 py-2 rounded-xl bg-zinc-100 hover:bg-zinc-200 text-zinc-700 font-medium text-xs border border-zinc-200 transition flex items-center justify-center gap-1 cursor-pointer whitespace-nowrap keycap-btn"
         >
           <Award className="w-3.5 h-3.5 shrink-0" />
           <span>スコア一覧</span>

@@ -3,17 +3,26 @@
 
 @layer base {
   :root {
-    font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Hiragino Kaku Gothic ProN", "Yu Gothic UI", "Meiryo", "Noto Sans JP", system-ui, sans-serif;
+    font-family: 'Plus Jakarta Sans', 'Noto Sans JP', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Hiragino Sans", "Hiragino Kaku Gothic ProN", system-ui, sans-serif;
     -webkit-tap-highlight-color: transparent;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+    font-feature-settings: 'palt' 1, 'tnum' 1;
   }
 
   body {
-    background-color: #f8fafc;
-    color: #0f172a;
+    background-color: #f4f4f5;
+    color: #18181b;
     margin: 0;
     padding: 0;
     overflow-x: hidden;
   }
+}
+
+.font-display {
+  font-family: 'Plus Jakarta Sans', system-ui, sans-serif;
+  letter-spacing: -0.02em;
 }
 
 .touch-drag-zone {
@@ -25,5 +34,35 @@
 .no-select {
   user-select: none;
   -webkit-user-select: none;
+}
+
+/* 触覚的メカニカルキートップ（iOS/macOS基準の上質シャドウと打鍵感） */
+.keycap-btn {
+  box-shadow: 0 1.5px 0 rgba(0, 0, 0, 0.08), 0 0 0 1px rgba(0, 0, 0, 0.04);
+  transition: all 0.08s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.keycap-btn:active {
+  transform: translateY(1.5px) scale(0.97);
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.06);
+}
+
+/* スクロールバーの洗練（細幅・自然な角丸） */
+::-webkit-scrollbar {
+  width: 5px;
+  height: 5px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(161, 161, 170, 0.4);
+  border-radius: 9999px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(113, 113, 122, 0.6);
 }
 
