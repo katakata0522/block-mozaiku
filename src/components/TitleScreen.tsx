@@ -237,24 +237,20 @@ export const TitleScreen: React.FC<TitleScreenProps> = ({
 
   return (
     <div className="w-full h-full flex flex-col bg-white border border-zinc-200/90 rounded-3xl p-3 sm:p-5 shadow-xl backdrop-blur-md overflow-hidden text-zinc-900">
-      {/* 売り物クオリティの洗練されたブランドヘッダー */}
-      <div className="text-center shrink-0 pb-1.5 pt-0.5">
-        <div className="flex items-center justify-center gap-2 mb-1">
-          <BrandLogo size={24} />
-          <span className="font-display text-[11px] font-extrabold tracking-widest uppercase text-blue-600">
-            MOSAIC BREAK
-          </span>
+      {/* 洗練されたブランドヘッダー（重複排除・コンテンツ最優先） */}
+      <div className="text-center shrink-0 pb-1 pt-0.5">
+        <div className="flex items-center justify-center gap-2 mb-0.5">
+          <BrandLogo size={22} />
+          <h1 className="text-lg sm:text-xl font-extrabold text-zinc-900 tracking-tight">
+            モザイクブレイク
+          </h1>
           <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-amber-700 bg-amber-50 border border-amber-200/80 px-2 py-0.5 rounded-full">
             <Sparkles className="w-2.5 h-2.5 text-amber-600 fill-amber-500" />
             <span>全100問</span>
           </span>
         </div>
-
-        <h1 className="text-xl sm:text-2xl font-extrabold text-zinc-900 tracking-tight leading-snug">
-          モザイクブレイク
-        </h1>
-        <p className="text-xs text-zinc-500 mt-0.5 max-w-sm mx-auto leading-relaxed text-balance">
-          壊すほど原画が晴れていく。何の写真かひらめいた瞬間に答えてハイスコア！
+        <p className="text-[11px] text-zinc-500 max-w-sm mx-auto leading-normal text-balance">
+          壊すほど写真が露出。ひらめいた瞬間に答えて最速タイムを目指そう！
         </p>
       </div>
 
@@ -270,7 +266,7 @@ export const TitleScreen: React.FC<TitleScreenProps> = ({
               handleAdvanceDemo();
             }
           }}
-          className="relative w-full max-w-[260px] sm:max-w-[280px] aspect-[16/9] rounded-xl overflow-hidden border border-zinc-200 shadow-sm cursor-pointer group select-none transition hover:shadow-md"
+          className="relative w-full max-w-[240px] sm:max-w-[280px] aspect-[20/9] sm:aspect-[16/9] rounded-xl overflow-hidden border border-zinc-200 shadow-sm cursor-pointer group select-none transition hover:shadow-md"
           title="タップでモザイクの3段階露出（100%→70%→40%→0%クリア枠）を体験"
         >
           <canvas
@@ -391,7 +387,7 @@ export const TitleScreen: React.FC<TitleScreenProps> = ({
                 : 'text-zinc-500 hover:text-zinc-800'
             }`}
           >
-            ⏱️ タイムアタック（制限時間あり）
+            ⏱️ タイムアタック（最速クリア）
           </button>
           <button
             type="button"
@@ -402,7 +398,7 @@ export const TitleScreen: React.FC<TitleScreenProps> = ({
                 : 'text-zinc-500 hover:text-zinc-800'
             }`}
           >
-            ☕ フリープレイ（時間無制限）
+            ☕ フリープレイ（練習モード）
           </button>
         </div>
 
