@@ -142,6 +142,16 @@ function getStagesForCourse(course: CourseMode): PuzzleStage[] {
   return shuffled.slice(0, 5);
 }
 
+function formatStopwatch(totalSec: number): string {
+  const mins = Math.floor(totalSec / 60);
+  const secs = Math.floor(totalSec % 60);
+  const tenths = Math.floor((totalSec % 1) * 10);
+  if (mins > 0) {
+    return `${mins}:${secs.toString().padStart(2, '0')}.${tenths}`;
+  }
+  return `${secs}.${tenths}s`;
+}
+
 export default function App() {
   // --- 設定 ---
   const [isMuted, setIsMuted] = useState<boolean>(false);
@@ -190,6 +200,12 @@ export default function App() {
   const [phaseBeforePause, setPhaseBeforePause] = useState<'PLAYING' | 'READY'>('PLAYING');
   const phaseBeforePauseRef = useRef<'PLAYING' | 'READY'>('PLAYING');
   phaseBeforePauseRef.current = phaseBeforePause;
+
+  // --- 純粋タイムアタック・演出用状態 ---
+  const [stageIntroBanner, setStageIntroBanner] = useState<string | null>(null);
+  const [dropPenaltyCountdown, setDropPenaltyCountdown] = useState<number | null>(null);
+  const dropIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const totalCourseElapsedSecRef = useRef<number>(0);
 
   // --- 回答・結果状態 ---
   const [answerInput, setAnswerInput] = useState<string>('');
@@ -501,8 +517,13 @@ export default function App() {
       elapsedMsRef.current = 0;
       lastMetricsSecRef.current = 0;
       lastDisplayedTenthRef.current = 0;
+      totalCourseElapsedSecRef.current = stageList.slice(0, stageIdx).reduce((acc: number, st: PuzzleStage) => {
+        const rec = stageRecords[st.id];
+        return acc + (rec ? rec.elapsedSec : 0);
+      }, 0);
+
       if (elapsedTimerSpanRef.current) {
-        elapsedTimerSpanRef.current.textContent = `0.0s / 目標${targetStage.rivalTargetSec.toFixed(1)}s`;
+        elapsedTimerSpanRef.current.textContent = formatStopwatch(totalCourseElapsedSecRef.current);
       }
       currentStageIndexRef.current = stageIdx;
       livesRef.current = MAX_LIVES;
@@ -515,10 +536,36 @@ export default function App() {
       setAnswerInput('');
       setAnswerFeedback({ type: null, message: '' });
       setCurrentStageRecord(null);
+      setStageIntroBanner(`STAGE ${stageIdx + 1}`);
+      setTimeout(() => {
+        setStageIntroBanner(null);
+      }, 1100);
       setPhase('READY');
     },
-    [clearAllMovementInputs, createInitialTiles, prepareOffscreenArtwork, resetBallOnPaddle]
+    [clearAllMovementInputs, createInitialTiles, prepareOffscreenArtwork, resetBallOnPaddle, stageRecords]
   );
+
+  const triggerDropRestart = useCallback(() => {
+    if (dropIntervalRef.current) clearInterval(dropIntervalRef.current);
+    setDropPenaltyCountdown(3);
+    soundEngine.playCountdownTick();
+    setPhase('COUNTDOWN');
+
+    let count = 3;
+    dropIntervalRef.current = setInterval(() => {
+      count -= 1;
+      if (count > 0) {
+        setDropPenaltyCountdown(count);
+        soundEngine.playCountdownTick();
+      } else {
+        if (dropIntervalRef.current) clearInterval(dropIntervalRef.current);
+        dropIntervalRef.current = null;
+        setDropPenaltyCountdown(null);
+        setPhase('READY');
+        soundEngine.playLaunch();
+      }
+    }, 450);
+  }, []);
 
   const startNewGame = useCallback(
     (course: CourseMode = selectedCourse) => {
@@ -1152,10 +1199,8 @@ export default function App() {
         if (currentTenth !== lastDisplayedTenthRef.current) {
           lastDisplayedTenthRef.current = currentTenth;
           if (elapsedTimerSpanRef.current) {
-            const activeStage =
-              activeStagesRef.current[currentStageIndexRef.current] || PUZZLE_STAGES[0];
-            const secStr = (currentTenth / 10).toFixed(1);
-            elapsedTimerSpanRef.current.textContent = `${secStr}s / 目標${activeStage.rivalTargetSec.toFixed(1)}s`;
+            const currentTotalSec = totalCourseElapsedSecRef.current + (currentTenth / 10);
+            elapsedTimerSpanRef.current.textContent = formatStopwatch(currentTotalSec);
           }
         }
 
@@ -1485,19 +1530,11 @@ export default function App() {
 
             if (phaseRef.current !== 'PLAYING') break;
 
-            // 落球判定
+            // 落球判定: ライフ廃止・タイムロス＆3, 2, 1クイックリスタート
             if (ball.y - BALL_RADIUS > CANVAS_HEIGHT + 6) {
-              const nextLives = livesRef.current - 1;
-              livesRef.current = nextLives;
-              setLives(nextLives);
               soundEngine.playMiss();
-
-              if (nextLives <= 0) {
-                transitionToLastChance('OUT_OF_LIVES');
-              } else {
-                resetBallOnPaddle();
-                setPhase('READY');
-              }
+              resetBallOnPaddle();
+              triggerDropRestart();
               break;
             }
           }
@@ -1575,20 +1612,13 @@ export default function App() {
         soundEngine.playCorrect();
         finalizeStageResult('NORMAL_CORRECT');
       } else {
-        const nextLives = livesRef.current - 1;
-        livesRef.current = nextLives;
-        setLives(nextLives);
         soundEngine.playMiss();
-
-        if (nextLives <= 0) {
-          transitionToLastChance('OUT_OF_LIVES');
-        } else {
-          setAnswerFeedback({
-            type: 'WRONG',
-            message: `「${rawText}」は不正解です。ライフが1減少しました（残り ${nextLives}）。`,
-          });
-          setAnswerInput('');
-        }
+        elapsedMsRef.current += 3000;
+        setAnswerFeedback({
+          type: 'WRONG',
+          message: `「${rawText}」は不正解です（タイム+3秒ペナルティ加算）`,
+        });
+        setAnswerInput('');
       }
     } else if (phase === 'LAST_CHANCE') {
       if (judgment.isCorrect) {
@@ -1627,6 +1657,10 @@ export default function App() {
     return acc + (rec && !rec.isPractice ? rec.score : 0);
   }, 0);
 
+  const totalCourseElapsedSec = Object.values(stageRecords).reduce((acc, rec) => {
+    return acc + (rec ? rec.elapsedSec : 0);
+  }, 0);
+
   const formatRemainingSeconds = (totalSec: number) => {
     const mins = Math.floor(totalSec / 60);
     const secs = totalSec % 60;
@@ -1640,9 +1674,10 @@ export default function App() {
 
   return (
     <div className="h-dvh w-full bg-zinc-100 text-zinc-900 flex flex-col items-center justify-between select-none overflow-hidden">
-      {/* クリーンなトップステータスバー（1行完結・ストアフロント基準） */}
+      {/* クリーンなトップステータスバー（1行完結・純粋タイムアタック） */}
       <header className="w-full max-w-xl h-12 px-3 flex items-center justify-between border-b border-zinc-200/90 bg-white/95 backdrop-blur-md shrink-0 shadow-xs">
-        <div className="flex items-center gap-2 min-w-0">
+        {/* 左側: ホームボタン または ブランドロゴ */}
+        <div className="flex items-center gap-2 shrink-0">
           {isGameActive ? (
             <button
               type="button"
@@ -1657,41 +1692,7 @@ export default function App() {
             <BrandLogo size={20} />
           )}
 
-          {isGameActive ? (
-            <div className="flex items-center gap-2 text-xs font-medium text-zinc-700 truncate">
-              <span className="font-display font-bold text-zinc-900 bg-zinc-100 border border-zinc-200/90 px-1.5 py-0.5 rounded-md text-[11px] whitespace-nowrap">
-                STAGE {currentStageIndex + 1}/{activeStages.length}
-              </span>
-              <span aria-hidden="true" className="text-zinc-300">
-                ·
-              </span>
-              <div className="flex items-center gap-1 font-display font-bold whitespace-nowrap text-[11px]">
-                <span
-                  className={`w-1.5 h-1.5 rounded-full ${
-                    stageMetrics.mosaicPercent <= 30
-                      ? 'bg-emerald-500 animate-pulse'
-                      : stageMetrics.mosaicPercent <= 60
-                      ? 'bg-amber-500'
-                      : 'bg-blue-500'
-                  }`}
-                />
-                <span className="text-zinc-500 font-normal">残</span>
-                <span className="tabular-nums text-zinc-900">{stageMetrics.mosaicPercent}%</span>
-              </div>
-              <span aria-hidden="true" className="text-zinc-300 hidden sm:inline">
-                ·
-              </span>
-              <span
-                className="font-display tabular-nums text-emerald-700 whitespace-nowrap hidden sm:inline-flex items-center gap-1 font-semibold text-[11px]"
-                title={`ライバル目標タイム: ${currentStage.rivalTargetSec.toFixed(1)}s`}
-              >
-                <Timer className="w-3 h-3" />
-                <span ref={elapsedTimerSpanRef}>
-                  {stageMetrics.elapsedSec.toFixed(1)}s / 目標{currentStage.rivalTargetSec.toFixed(1)}s
-                </span>
-              </span>
-            </div>
-          ) : (
+          {!isGameActive && (
             <div className="flex items-center gap-1.5 min-w-0">
               <span className="font-display text-xs sm:text-sm font-extrabold tracking-tight text-zinc-900 truncate">
                 MOSAIC BREAK
@@ -1703,36 +1704,46 @@ export default function App() {
           )}
         </div>
 
-        {/* 右側メトリクス＆ユーティリティ */}
-        <div className="flex items-center gap-2 shrink-0">
-          {isGameActive && (
-            <>
-              <div className="flex items-center gap-0.5" aria-label={`ライフ ${lives}`}>
-                {Array.from({ length: MAX_LIVES }).map((_, idx) => (
-                  <Heart
+        {/* 中央: ステージ進行プログレスドット（● ● ○ ○ ○） */}
+        {isGameActive && (
+          <div className="flex items-center gap-1.5">
+            {activeStages.length <= 10 ? (
+              <div className="flex items-center gap-1.5 px-3 py-1 bg-zinc-100 border border-zinc-200/80 rounded-full shadow-2xs">
+                {activeStages.map((_, idx) => (
+                  <span
                     key={idx}
-                    className={`w-3.5 h-3.5 transition ${
-                      idx < lives
-                        ? 'text-rose-500 fill-rose-500 drop-shadow-[0_1px_2px_rgba(244,63,94,0.3)]'
-                        : 'text-zinc-300 fill-zinc-200'
+                    className={`w-2 h-2 rounded-full transition-all duration-300 ${
+                      idx < currentStageIndex
+                        ? 'bg-emerald-500 scale-95'
+                        : idx === currentStageIndex
+                        ? 'bg-blue-600 scale-125 ring-2 ring-blue-400/40'
+                        : 'bg-zinc-300'
                     }`}
+                    title={`STAGE ${idx + 1}`}
                   />
                 ))}
               </div>
+            ) : (
+              <div className="flex items-center gap-1 px-3 py-1 bg-zinc-100 border border-zinc-200/80 rounded-full font-display text-[11px] font-bold text-zinc-800 shadow-2xs">
+                <span className="text-blue-600 font-extrabold">STAGE {currentStageIndex + 1}</span>
+                <span className="text-zinc-400 font-normal">/ {activeStages.length}</span>
+              </div>
+            )}
+          </div>
+        )}
 
-              <span aria-hidden="true" className="text-zinc-300">
-                ·
-              </span>
-
+        {/* 右側: 唯一の時計（累計ストップウォッチ ⏱️ 00:23.4） ＆ ホールド ＆ ミュート */}
+        <div className="flex items-center gap-2 shrink-0">
+          {isGameActive && (
+            <>
               <div
-                className={`flex items-center gap-1 text-xs font-display tabular-nums font-bold ${
-                  !isPracticeMode && remainingSeconds <= 15
-                    ? 'text-rose-600 animate-pulse'
-                    : 'text-zinc-700'
-                }`}
+                className="flex items-center gap-1 text-xs font-display tabular-nums font-bold px-2.5 py-1 bg-zinc-100 border border-zinc-200/90 rounded-lg text-zinc-900 shadow-2xs"
+                title="コース合計経過タイム（タイムアタック）"
               >
-                <Clock className="w-3.5 h-3.5 text-blue-500" />
-                <span>{isPracticeMode ? 'FREE' : formatRemainingSeconds(remainingSeconds)}</span>
+                <Timer className="w-3.5 h-3.5 text-blue-600" />
+                <span ref={elapsedTimerSpanRef}>
+                  {formatStopwatch(totalCourseElapsedSec + stageMetrics.elapsedSec)}
+                </span>
               </div>
 
               <button
@@ -1781,7 +1792,7 @@ export default function App() {
       </header>
 
       {/* メインアプリビューポート（スクロールなし・1画面完結） */}
-      <main className="w-full max-w-xl flex-1 min-h-0 flex flex-col items-center justify-between px-2.5 sm:px-3 py-2 gap-1.5 overflow-hidden">
+      <main className="w-full max-w-xl flex-1 min-h-0 flex flex-col items-center justify-between px-2.5 sm:px-3 py-2 gap-2 overflow-hidden">
         {phase === 'TITLE' && (
           <TitleScreen
             isPracticeMode={isPracticeMode}
@@ -1805,28 +1816,7 @@ export default function App() {
 
         {isGameActive && (
           <>
-            {/* プレイ中のみ表示する進行ガイドバー（回答・結果ドロワー表示時は自動で畳んでキャンバス表示領域を最大化） */}
-            {!isDockExpanded && (
-              <div className="w-full px-3 py-1 rounded-xl bg-white/95 border border-zinc-200/90 flex items-center justify-between gap-2 text-xs shrink-0 shadow-xs">
-                <div className="flex items-center gap-1.5 min-w-0 truncate">
-                  <span
-                    className={`w-2 h-2 rounded-full shrink-0 ${
-                      hasCluesRevealed ? 'bg-emerald-500 animate-pulse' : 'bg-blue-500'
-                    }`}
-                  />
-                  <span className="text-zinc-700 truncate font-medium">
-                    {hasCluesRevealed
-                      ? '写真が露出中！ひらめいたら「💡 回答する」または [Enter] でクリア！'
-                      : '3打で0%枠を開けて原画露出！何の写真か分かったら「回答する」'}
-                  </span>
-                </div>
-                <span className="text-[11px] font-semibold text-zinc-500 whitespace-nowrap shrink-0 hidden sm:inline bg-zinc-100 px-2 py-0.5 rounded-md">
-                  {currentStage.categoryLabel}
-                </span>
-              </div>
-            )}
-
-            {/* 中央ゲームキャンバス領域 */}
+            {/* 中央ゲームキャンバス領域（余計なガイドバーを排除し最大化） */}
             <div className="relative w-full flex-1 min-h-0 bg-white rounded-2xl overflow-hidden border border-zinc-200 shadow-xl flex items-center justify-center">
               <canvas
                 ref={canvasRef}
@@ -1855,30 +1845,38 @@ export default function App() {
                 className="w-full h-full object-contain block cursor-pointer touch-none"
               />
 
-              {/* 発射待機時のコンパクトなローンチトリガー */}
-              {(phase === 'READY' ||
-                (phase === 'PLAYING' && ballRef.current.attachedToPaddle)) && (
-                <div className="absolute inset-x-4 bottom-14 pointer-events-none flex flex-col items-center">
-                  <div className="bg-white/95 border border-zinc-200/90 rounded-2xl px-4 py-2.5 text-center shadow-xl pointer-events-auto backdrop-blur-md">
-                    <div className="text-[11px] text-zinc-600 font-medium">
-                      カテゴリ：<span className="text-zinc-900 font-bold">{currentStage.categoryLabel}</span>
-                      <span className="mx-1.5 text-zinc-300">·</span>
-                      <span className="text-amber-600 font-bold">★枠破壊で連鎖爆縮！</span>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        launchBallFromPaddle();
-                        setPhase('PLAYING');
-                      }}
-                      className="mt-1.5 min-h-9 px-6 py-1.5 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-white font-bold text-xs shadow-md transition inline-flex items-center gap-1.5 cursor-pointer whitespace-nowrap keycap-btn"
-                    >
-                      <Play className="w-3.5 h-3.5 fill-current text-sky-400" />
-                      <span>タップまたは [Space] で発射</span>
-                    </button>
+              {/* ステージ開始コール（1秒でスッと消えるアーケード演出） */}
+              {stageIntroBanner && (
+                <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-20">
+                  <div className="px-8 py-3 rounded-2xl bg-zinc-950/85 border border-white/20 text-white font-display font-black text-3xl tracking-widest shadow-2xl backdrop-blur-md animate-in fade-in zoom-in-95 duration-200">
+                    {stageIntroBanner}
                   </div>
                 </div>
               )}
+
+              {/* 落球時の3, 2, 1クイックリスタートオーバーレイ（時間は経過するタイムロス制） */}
+              {dropPenaltyCountdown !== null && (
+                <div className="absolute inset-0 bg-zinc-950/60 backdrop-blur-xs flex flex-col items-center justify-center z-20 pointer-events-none">
+                  <div className="text-xs font-display font-extrabold text-rose-400 uppercase tracking-widest mb-1">
+                    MISS! RESTART IN
+                  </div>
+                  <div className="text-6xl font-black text-white font-display tabular-nums drop-shadow-xl animate-in zoom-in-75 duration-150">
+                    {dropPenaltyCountdown}
+                  </div>
+                </div>
+              )}
+
+              {/* 発射待機時の控えめな発射ガイド（パドル上部に上品に配置） */}
+              {(phase === 'READY' ||
+                (phase === 'PLAYING' && ballRef.current.attachedToPaddle)) &&
+                dropPenaltyCountdown === null && (
+                  <div className="absolute bottom-16 inset-x-0 flex flex-col items-center pointer-events-none z-10">
+                    <div className="px-4 py-1.5 rounded-full bg-zinc-950/80 text-white text-xs font-display font-semibold backdrop-blur-sm shadow-md flex items-center gap-1.5 animate-bounce">
+                      <Play className="w-3 h-3 fill-current text-sky-400" />
+                      <span>タップ または [Space] で発射</span>
+                    </div>
+                  </div>
+                )}
 
               {/* カウントダウンオーバーレイ */}
               {phase === 'COUNTDOWN' && (
@@ -1959,75 +1957,24 @@ export default function App() {
               )}
 
               {phase !== 'ANSWERING' && phase !== 'LAST_CHANCE' && phase !== 'STAGE_RESULT' && (
-                <div className="w-full flex items-center gap-2">
-                  {/* 左微調整ボタン */}
-                  <button
-                    type="button"
-                    disabled={phase !== 'PLAYING' && phase !== 'READY'}
-                    onPointerDown={(e) => {
-                      e.currentTarget.setPointerCapture(e.pointerId);
-                      buttonHoldRef.current.left = true;
-                    }}
-                    onPointerUp={() => {
-                      buttonHoldRef.current.left = false;
-                    }}
-                    onPointerCancel={() => {
-                      buttonHoldRef.current.left = false;
-                    }}
-                    onPointerLeave={() => {
-                      buttonHoldRef.current.left = false;
-                    }}
-                    className="touch-drag-zone min-w-10 min-h-11 px-2.5 rounded-xl bg-white hover:bg-zinc-100 active:bg-zinc-200 border border-zinc-200 text-zinc-700 flex items-center justify-center disabled:opacity-40 transition cursor-pointer shrink-0 shadow-xs keycap-btn"
-                    aria-label="左へ移動"
-                    title="左へ移動"
-                  >
-                    <ChevronLeft className="w-5 h-5" />
-                  </button>
-
-                  {/* 右微調整ボタン */}
-                  <button
-                    type="button"
-                    disabled={phase !== 'PLAYING' && phase !== 'READY'}
-                    onPointerDown={(e) => {
-                      e.currentTarget.setPointerCapture(e.pointerId);
-                      buttonHoldRef.current.right = true;
-                    }}
-                    onPointerUp={() => {
-                      buttonHoldRef.current.right = false;
-                    }}
-                    onPointerCancel={() => {
-                      buttonHoldRef.current.right = false;
-                    }}
-                    onPointerLeave={() => {
-                      buttonHoldRef.current.right = false;
-                    }}
-                    className="touch-drag-zone min-w-10 min-h-11 px-2.5 rounded-xl bg-white hover:bg-zinc-100 active:bg-zinc-200 border border-zinc-200 text-zinc-700 flex items-center justify-center disabled:opacity-40 transition cursor-pointer shrink-0 shadow-xs keycap-btn"
-                    aria-label="右へ移動"
-                    title="右へ移動"
-                  >
-                    <ChevronRight className="w-5 h-5" />
-                  </button>
-
-                  {/* メイン: クリアへ直結する「回答する」堂々ボタン（画面の主役） */}
-                  <button
-                    type="button"
-                    disabled={phase !== 'PLAYING' && phase !== 'READY'}
-                    onClick={handleOpenAnswerModal}
-                    className={`flex-1 min-h-11 px-4 rounded-xl active:scale-[0.99] disabled:opacity-40 font-bold text-sm shadow-md transition flex items-center justify-center gap-2 cursor-pointer whitespace-nowrap keycap-btn ${
-                      hasCluesRevealed
-                        ? 'bg-gradient-to-r from-emerald-600 via-emerald-500 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white shadow-emerald-600/30 ring-2 ring-emerald-400/50'
-                        : 'bg-zinc-900 hover:bg-zinc-800 text-white shadow-zinc-900/20'
-                    }`}
-                    title="何の写真か分かった瞬間にタップ！（Enterキーでも即座に開けます）"
-                  >
-                    <span className="text-base">💡</span>
-                    <span>何の写真か回答する</span>
-                    <span className="font-display tabular-nums text-xs font-bold bg-white/20 px-2 py-0.5 rounded-md backdrop-blur-xs">
-                      +{stageMetrics.potentialNormalScore} pt
-                    </span>
-                    <span className="text-[10px] text-zinc-300 font-display font-normal hidden sm:inline">[Enter]</span>
-                  </button>
-                </div>
+                <button
+                  type="button"
+                  disabled={phase !== 'PLAYING' && phase !== 'READY'}
+                  onClick={handleOpenAnswerModal}
+                  className={`w-full min-h-12 px-6 rounded-2xl active:scale-[0.99] disabled:opacity-40 font-bold text-sm sm:text-base shadow-md transition flex items-center justify-center gap-2.5 cursor-pointer keycap-btn ${
+                    hasCluesRevealed
+                      ? 'bg-gradient-to-r from-emerald-600 via-emerald-500 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white shadow-emerald-600/30 ring-2 ring-emerald-400/50'
+                      : 'bg-zinc-900 hover:bg-zinc-800 text-white shadow-zinc-900/20'
+                  }`}
+                  title="何の写真か分かった瞬間にタップ！（Enterキーでも即座に開けます）"
+                >
+                  <span className="text-lg">💡</span>
+                  <span>何の写真か回答する</span>
+                  <span className="font-display tabular-nums text-xs sm:text-sm font-extrabold bg-white/20 px-2.5 py-0.5 rounded-lg backdrop-blur-xs">
+                    +{stageMetrics.potentialNormalScore} pt
+                  </span>
+                  <span className="text-[11px] text-zinc-300 font-display font-medium hidden sm:inline">[Enter]</span>
+                </button>
               )}
             </div>
           </>
