@@ -5259,50 +5259,72 @@ function renderPixelHeartScene(ctx: CanvasRenderingContext2D, w: number, h: numb
  * STAGE 29: コーヒーカップ（ホットコーヒー・モダンベクターアート）
  */
 function renderCoffeeScene(ctx: CanvasRenderingContext2D, w: number, h: number) {
-  // カフェの落ち着いた木目背景
+  // カフェの温かみのあるウッドテーブル背景
   const bgGrad = ctx.createLinearGradient(0, 0, 0, h);
-  bgGrad.addColorStop(0, '#292524');
-  bgGrad.addColorStop(1, '#1c1917');
+  bgGrad.addColorStop(0, '#271c19');
+  bgGrad.addColorStop(1, '#150f0d');
   ctx.fillStyle = bgGrad;
   ctx.fillRect(0, 0, w, h);
 
   const cx = w * 0.5;
-  const cy = h * 0.58;
+  const cy = h * 0.56;
+  const s = Math.min(w, h);
 
-  // ソーサー（皿）
+  // ソーサー（受け皿・影と美しい磁器）
+  ctx.fillStyle = 'rgba(0, 0, 0, 0.4)';
+  ctx.beginPath();
+  ctx.ellipse(cx, cy + s * 0.23, s * 0.38, s * 0.12, 0, 0, Math.PI * 2);
+  ctx.fill();
+
+  ctx.fillStyle = '#f8fafc';
+  ctx.beginPath();
+  ctx.ellipse(cx, cy + s * 0.20, s * 0.36, s * 0.10, 0, 0, Math.PI * 2);
+  ctx.fill();
   ctx.fillStyle = '#e2e8f0';
   ctx.beginPath();
-  ctx.ellipse(cx, cy + 30, w * 0.28, h * 0.08, 0, 0, Math.PI * 2);
+  ctx.ellipse(cx, cy + s * 0.19, s * 0.30, s * 0.08, 0, 0, Math.PI * 2);
   ctx.fill();
 
-  // カップの取っ手
-  ctx.strokeStyle = '#ffffff';
-  ctx.lineWidth = 14;
-  ctx.beginPath();
-  ctx.arc(cx + w * 0.16, cy, 28, -Math.PI * 0.4, Math.PI * 0.4);
-  ctx.stroke();
-
-  // マグカップ本体
-  ctx.fillStyle = '#ffffff';
-  ctx.beginPath();
-  ctx.roundRect(cx - w * 0.16, cy - 40, w * 0.32, 70, [0, 0, 24, 24]);
-  ctx.fill();
-
-  // カップ内のコーヒー液面
-  ctx.fillStyle = '#78350f';
-  ctx.beginPath();
-  ctx.ellipse(cx, cy - 40, w * 0.16, 16, 0, 0, Math.PI * 2);
-  ctx.fill();
-
-  // 立ちのぼる繊細な白い湯気
-  ctx.strokeStyle = 'rgba(255, 255, 255, 0.45)';
-  ctx.lineWidth = 4;
+  // マグカップの取っ手（ハンドル・相対スケール）
+  ctx.strokeStyle = '#f8fafc';
+  ctx.lineWidth = s * 0.045;
   ctx.lineCap = 'round';
   ctx.beginPath();
-  ctx.moveTo(cx - 20, cy - 60);
-  ctx.bezierCurveTo(cx - 35, cy - 90, cx - 10, cy - 120, cx - 25, cy - 150);
-  ctx.moveTo(cx + 15, cy - 60);
-  ctx.bezierCurveTo(cx + 30, cy - 95, cx + 5, cy - 125, cx + 20, cy - 155);
+  ctx.arc(cx + s * 0.20, cy + s * 0.02, s * 0.09, -Math.PI * 0.4, Math.PI * 0.4);
+  ctx.stroke();
+
+  // マグカップ本体（滑らかなカーブと陶器の白さ）
+  ctx.fillStyle = '#ffffff';
+  ctx.beginPath();
+  ctx.roundRect(cx - s * 0.20, cy - s * 0.14, s * 0.40, s * 0.32, [0, 0, s * 0.08, s * 0.08]);
+  ctx.fill();
+
+  // カップ内側のダークローストコーヒー液面
+  ctx.fillStyle = '#3f1a04';
+  ctx.beginPath();
+  ctx.ellipse(cx, cy - s * 0.14, s * 0.19, s * 0.065, 0, 0, Math.PI * 2);
+  ctx.fill();
+
+  // コーヒーの泡（クレマとツヤ）
+  ctx.fillStyle = '#9a3412';
+  ctx.beginPath();
+  ctx.ellipse(cx, cy - s * 0.14, s * 0.15, s * 0.045, 0, 0, Math.PI * 2);
+  ctx.fill();
+
+  ctx.fillStyle = '#d97706';
+  ctx.beginPath();
+  ctx.ellipse(cx - s * 0.03, cy - s * 0.145, s * 0.08, s * 0.02, 0.2, 0, Math.PI * 2);
+  ctx.fill();
+
+  // 立ちのぼる優しい湯気（スチーム）
+  ctx.strokeStyle = 'rgba(255, 255, 255, 0.65)';
+  ctx.lineWidth = Math.max(2, s * 0.016);
+  ctx.lineCap = 'round';
+  ctx.beginPath();
+  ctx.moveTo(cx - s * 0.06, cy - s * 0.22);
+  ctx.bezierCurveTo(cx - s * 0.12, cy - s * 0.32, cx - s * 0.02, cy - s * 0.40, cx - s * 0.08, cy - s * 0.48);
+  ctx.moveTo(cx + s * 0.05, cy - s * 0.22);
+  ctx.bezierCurveTo(cx + s * 0.11, cy - s * 0.32, cx + s * 0.01, cy - s * 0.41, cx + s * 0.07, cy - s * 0.49);
   ctx.stroke();
 }
 

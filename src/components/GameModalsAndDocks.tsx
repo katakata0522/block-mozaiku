@@ -57,59 +57,22 @@ export const AnswerDock: React.FC<AnswerDockProps> = ({
   };
 
   return (
-    <div className="w-full bg-white/95 border border-zinc-200 rounded-2xl p-2.5 sm:p-3 shadow-2xl backdrop-blur-md space-y-1.5 text-zinc-800">
-      {/* 上部ステータス行 */}
-      <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
-        <div className="flex items-center gap-2 text-zinc-700 font-medium">
-          <span
-            className={
-              phase === 'LAST_CHANCE' ? 'text-rose-600 font-bold' : 'text-emerald-600 font-bold'
-            }
-          >
-            {phase === 'LAST_CHANCE'
-              ? lastChanceReason === 'ALL_TILES_CLEARED'
-                ? 'モザイク0%・最終回答'
-                : lastChanceReason === 'OUT_OF_LIVES'
-                ? 'ライフ終了・最終回答'
-                : 'タイムアップ・最終回答'
-              : '早押し回答（タイピング入力）'}
-          </span>
-          <span aria-hidden="true" className="text-zinc-300">
-            ·
-          </span>
-          <span className="font-mono tabular-nums text-blue-600 font-bold">
-            +{phase === 'LAST_CHANCE' ? 100 : potentialNormalScore} pt
-          </span>
-          <span aria-hidden="true" className="text-zinc-300">
-            ·
-          </span>
-          <span className="font-mono tabular-nums text-zinc-600 flex items-center gap-1">
-            <Timer className="w-3 h-3 text-blue-500" />
-            {elapsedSec.toFixed(1)}s
-          </span>
-        </div>
-
-        <div className="flex items-center gap-2">
-          <span className="text-[11px] text-zinc-500 font-medium">
-            カテゴリ：{currentStage.categoryLabel}
-          </span>
-        </div>
-      </div>
-
+    <div className="w-full bg-white/95 border border-zinc-200 rounded-2xl p-2 sm:p-2.5 shadow-2xl backdrop-blur-md space-y-1.5 text-zinc-800">
       <form onSubmit={onSubmitAnswer} className="space-y-1.5">
-        {/* 自由タイピング入力欄 */}
-        <div className="space-y-1">
-          <div className="flex items-center justify-between text-[11px] text-zinc-500 px-0.5">
-            <span className="flex items-center gap-1 text-zinc-600 font-medium">
-              <Keyboard className="w-3 h-3 text-blue-500" />
-              <span>ひらがな・カタカナ・漢字・ローマ字・英語すべて対応</span>
-            </span>
-            <span className="text-[10px] text-zinc-400 hidden sm:inline">
-              Enterで回答送信 / Escで戻る
-            </span>
-          </div>
+        {/* 1段目: 戻る ＋ 入力フィールド ＋ 消す ＋ 送信ボタン（絵を隠さない1行集約） */}
+        <div className="flex items-center gap-1.5">
+          {phase === 'ANSWERING' && (
+            <button
+              type="button"
+              onClick={onReturnFromAnswer}
+              className="min-h-9 px-2.5 rounded-xl bg-zinc-100 hover:bg-zinc-200 text-zinc-700 text-xs font-medium border border-zinc-200 transition cursor-pointer whitespace-nowrap shrink-0 flex items-center gap-1"
+              title="Escキーでも戻れます"
+            >
+              <span>← 戻る</span>
+            </button>
+          )}
 
-          <div className="flex items-center gap-1.5 sm:gap-2">
+          <div className="relative flex-1 min-w-0">
             <label htmlFor="mosaic-answer-input" className="sr-only">
               写真の答えを入力
             </label>
@@ -132,51 +95,40 @@ export const AnswerDock: React.FC<AnswerDockProps> = ({
                   onReturnFromAnswer();
                 }
               }}
-              placeholder="答えを打って送信（ひらがな・カナ・漢字・英語OK）"
-              className="flex-1 min-h-9 sm:min-h-10 px-3 py-1 rounded-xl bg-zinc-50 border border-zinc-300 text-zinc-900 placeholder-zinc-400 text-xs sm:text-sm font-medium focus:outline-none focus:bg-white focus:border-blue-500 focus:ring-1 focus:ring-blue-500/30"
+              placeholder="答えを入力（かな・漢字・英字OK）"
+              className="w-full min-h-9 px-3 py-1 rounded-xl bg-zinc-50 border border-zinc-300 text-zinc-900 placeholder-zinc-400 text-xs sm:text-sm font-medium focus:outline-none focus:bg-white focus:border-blue-500 focus:ring-1 focus:ring-blue-500/30"
               autoComplete="off"
             />
-            {answerInput.length > 0 && (
-              <button
-                type="button"
-                onClick={handleBackspace}
-                className="min-h-9 sm:min-h-10 px-2.5 py-1 rounded-xl bg-zinc-100 hover:bg-zinc-200 text-zinc-700 text-xs border border-zinc-200 flex items-center gap-1 cursor-pointer whitespace-nowrap shrink-0"
-                title="1文字消す"
-              >
-                <Delete className="w-3.5 h-3.5" />
-                <span className="hidden sm:inline">1字消す</span>
-              </button>
-            )}
-            <button
-              type="submit"
-              className="min-h-9 sm:min-h-10 px-3.5 sm:px-4 py-1 rounded-xl bg-zinc-900 hover:bg-zinc-800 active:scale-[0.99] text-white font-bold text-xs sm:text-sm transition cursor-pointer whitespace-nowrap shrink-0 shadow-sm"
-            >
-              回答を送信
-            </button>
           </div>
+
+          {answerInput.length > 0 && (
+            <button
+              type="button"
+              onClick={handleBackspace}
+              className="min-h-9 px-2 rounded-xl bg-zinc-100 hover:bg-zinc-200 text-zinc-600 text-xs border border-zinc-200 flex items-center justify-center cursor-pointer shrink-0"
+              title="1文字消す"
+            >
+              <Delete className="w-4 h-4" />
+            </button>
+          )}
+
+          <button
+            type="submit"
+            className="min-h-9 px-3.5 sm:px-4 rounded-xl bg-blue-600 hover:bg-blue-500 active:scale-[0.99] text-white font-bold text-xs sm:text-sm transition cursor-pointer whitespace-nowrap shrink-0 shadow-sm"
+          >
+            送信
+          </button>
         </div>
 
-        {/* 1文字ずつ打てる16キーかなパッド */}
-        <div className="bg-zinc-50 border border-zinc-200 rounded-xl p-1.5 space-y-1">
-          <div className="flex items-center justify-between px-1 text-[10px] text-zinc-500">
-            <span>かな文字パッド（1文字ずつタップ入力も可能）：</span>
-            {answerInput.length > 0 && (
-              <button
-                type="button"
-                onClick={() => setAnswerInput('')}
-                className="text-rose-600 hover:text-rose-700 font-medium cursor-pointer"
-              >
-                入力クリア
-              </button>
-            )}
-          </div>
+        {/* 2段目: 16キーかなパッド（コンパクト＆タップしやすい8列×2行） */}
+        <div className="bg-zinc-50/80 border border-zinc-200/90 rounded-xl p-1 sm:p-1.5 space-y-0.5">
           <div className="grid grid-cols-8 gap-1">
             {currentStage.kanaPad.map((kana, idx) => (
               <button
                 key={`${currentStage.id}-kana-${idx}`}
                 type="button"
                 onClick={() => handleAppendKana(kana)}
-                className="min-h-7 sm:min-h-8 rounded-lg bg-white hover:bg-zinc-100 active:bg-blue-600 active:text-white text-zinc-800 font-bold text-xs border border-zinc-200 shadow-xs transition cursor-pointer flex items-center justify-center"
+                className="min-h-7 sm:min-h-8 rounded-lg bg-white hover:bg-blue-50 active:bg-blue-600 active:text-white text-zinc-800 font-bold text-xs border border-zinc-200 shadow-xs transition cursor-pointer flex items-center justify-center select-none"
               >
                 {kana}
               </button>
@@ -184,39 +136,51 @@ export const AnswerDock: React.FC<AnswerDockProps> = ({
           </div>
         </div>
 
+        {/* 不正解フィードバック（エラー時のみコンパクト表示） */}
         {answerFeedback.type && (
           <div
-            className={`px-3 py-1 rounded-lg text-xs font-medium flex items-center gap-2 ${
+            className={`px-2.5 py-1 rounded-lg text-xs font-medium flex items-center gap-1.5 ${
               answerFeedback.type === 'WRONG'
                 ? 'bg-rose-50 border border-rose-200 text-rose-800'
                 : 'bg-zinc-100 border border-zinc-200 text-zinc-700'
             }`}
           >
             <XCircle className="w-3.5 h-3.5 shrink-0" />
-            <span>{answerFeedback.message}</span>
+            <span className="truncate">{answerFeedback.message}</span>
           </div>
         )}
 
-        <div className="flex items-center justify-between pt-0.5">
-          {phase === 'ANSWERING' ? (
-            <button
-              type="button"
-              onClick={onReturnFromAnswer}
-              className="min-h-8 px-3 py-1 rounded-lg bg-zinc-100 hover:bg-zinc-200 text-zinc-700 font-medium text-xs border border-zinc-200 transition cursor-pointer whitespace-nowrap"
-            >
-              ボール打ち返しに戻る
-            </button>
-          ) : (
-            <span className="text-[11px] text-zinc-500">最終回答は1回のみ送信できます</span>
-          )}
+        {/* 3段目: ステータス＆正解を見る（下部バー） */}
+        <div className="flex items-center justify-between text-[11px] text-zinc-500 px-1 pt-0.5">
+          <div className="flex items-center gap-1.5 truncate">
+            <span className="font-semibold text-zinc-700 truncate">
+              {currentStage.categoryLabel}
+            </span>
+            <span aria-hidden="true" className="text-zinc-300">·</span>
+            <span className="font-mono tabular-nums text-blue-600 font-bold">
+              +{phase === 'LAST_CHANCE' ? 100 : potentialNormalScore}pt
+            </span>
+            {answerInput.length > 0 && (
+              <>
+                <span aria-hidden="true" className="text-zinc-300">·</span>
+                <button
+                  type="button"
+                  onClick={() => setAnswerInput('')}
+                  className="text-rose-600 hover:text-rose-700 font-medium cursor-pointer"
+                >
+                  全消去
+                </button>
+              </>
+            )}
+          </div>
 
           <button
             type="button"
             onClick={onGiveUpAndReveal}
-            className="min-h-8 px-3 py-1 rounded-lg bg-white hover:bg-zinc-50 text-zinc-500 hover:text-zinc-800 font-medium text-xs border border-zinc-200 transition flex items-center gap-1.5 cursor-pointer whitespace-nowrap"
+            className="text-[11px] text-zinc-400 hover:text-zinc-700 transition flex items-center gap-1 cursor-pointer whitespace-nowrap shrink-0 hover:underline"
           >
-            <Eye className="w-3.5 h-3.5" />
-            <span>正解を見る（0 pt）</span>
+            <Eye className="w-3 h-3" />
+            <span>正解を見る（0pt）</span>
           </button>
         </div>
       </form>

@@ -134,9 +134,9 @@ export const TitleScreen: React.FC<TitleScreenProps> = ({
   const selectedCourseObj = COURSE_OPTIONS.find((c) => c.id === selectedCourse);
 
   return (
-    <div className="w-full h-full flex flex-col justify-between bg-white/95 border border-zinc-200 rounded-3xl p-3 sm:p-5 shadow-2xl backdrop-blur-md overflow-y-auto text-zinc-900">
+    <div className="w-full h-full flex flex-col bg-white/95 border border-zinc-200 rounded-3xl p-3 sm:p-5 shadow-2xl backdrop-blur-md overflow-hidden text-zinc-900">
       {/* アプリタイトル ＆ 早押し・クリア条件の明確な案内 */}
-      <div className="text-center space-y-0.5 shrink-0">
+      <div className="text-center space-y-0.5 shrink-0 pb-1">
         <div className="text-[10px] font-bold tracking-widest uppercase text-blue-600">
           SPEED PHOTO MOSAIC BREAKOUT
         </div>
@@ -147,14 +147,11 @@ export const TitleScreen: React.FC<TitleScreenProps> = ({
           <strong className="text-blue-600 font-semibold">
             何の写真か分かった瞬間に「回答する」からタイピング正解でクリア！
           </strong>
-          <span className="block text-[10px] text-zinc-500">
-            クリアタイムの早さ＆残モザイク率でスコアが決まります（かな・カナ・漢字・英語すべて対応）
-          </span>
         </p>
       </div>
 
       {/* 実写モザイク 100% → 70% → 40% → 0%（3回で割れる）ライブプレビュー */}
-      <div className="py-1 flex flex-col items-center shrink-0">
+      <div className="py-1 flex flex-col items-center shrink-0 border-b border-zinc-100 pb-2">
         <div
           onClick={handleAdvanceDemo}
           role="button"
@@ -165,7 +162,7 @@ export const TitleScreen: React.FC<TitleScreenProps> = ({
               handleAdvanceDemo();
             }
           }}
-          className="relative w-full max-w-[280px] sm:max-w-xs aspect-[16/9] rounded-xl overflow-hidden border border-zinc-200 shadow-md cursor-pointer group select-none"
+          className="relative w-full max-w-[240px] sm:max-w-[260px] aspect-[16/9] rounded-xl overflow-hidden border border-zinc-200 shadow-md cursor-pointer group select-none"
           title="タップして3回で割れるモザイク変化（100%→70%→40%→0%クリア枠）を確認"
         >
           <canvas
@@ -174,24 +171,22 @@ export const TitleScreen: React.FC<TitleScreenProps> = ({
             height={225}
             className="w-full h-full object-cover block"
           />
-          <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-zinc-900/90 via-zinc-900/60 to-transparent px-3 py-1.5 flex items-center justify-between">
+          <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-zinc-900/90 via-zinc-900/60 to-transparent px-2.5 py-1 flex items-center justify-between">
             <div className="flex items-center gap-1.5 text-xs text-white">
-              <span className="font-mono font-bold text-sky-300 tabular-nums text-[11px]">
+              <span className="font-mono font-bold text-sky-300 tabular-nums text-[10px]">
                 {currentDemo.label}
               </span>
-              <span aria-hidden="true" className="text-zinc-400">
-                ·
-              </span>
+              <span aria-hidden="true" className="text-zinc-400">·</span>
               <span className="text-[10px] text-zinc-200">{currentDemo.hitsText}</span>
             </div>
-            <span className="text-[10px] text-white font-semibold bg-white/20 px-1.5 py-0.5 rounded">
+            <span className="text-[9px] text-white font-semibold bg-white/20 px-1.5 py-0.5 rounded">
               タップで変化
             </span>
           </div>
         </div>
 
         {/* 100% -> 70% -> 40% -> 0% セグメントセレクタ */}
-        <div className="mt-1.5 flex items-center gap-1 p-0.5 bg-zinc-100 border border-zinc-200 rounded-lg">
+        <div className="mt-1 flex items-center gap-1 p-0.5 bg-zinc-100 border border-zinc-200 rounded-lg">
           {DEMO_MOSAIC_STEPS.map((step, idx) => (
             <button
               key={step.percent}
@@ -200,7 +195,7 @@ export const TitleScreen: React.FC<TitleScreenProps> = ({
                 setDemoStepIndex(idx);
                 soundEngine.playBounce(true);
               }}
-              className={`min-h-7 px-2.5 py-0.5 rounded-md text-[11px] font-mono font-semibold tabular-nums transition cursor-pointer whitespace-nowrap ${
+              className={`min-h-6 px-2 py-0.5 rounded-md text-[10px] font-mono font-semibold tabular-nums transition cursor-pointer whitespace-nowrap ${
                 demoStepIndex === idx
                   ? 'bg-white text-zinc-900 shadow-xs border border-zinc-200/80'
                   : 'text-zinc-500 hover:text-zinc-800'
@@ -210,93 +205,80 @@ export const TitleScreen: React.FC<TitleScreenProps> = ({
             </button>
           ))}
         </div>
+      </div>
 
-        {/* クリアまでの3ステップガイド */}
-        <div className="mt-1.5 w-full max-w-md grid grid-cols-3 gap-1 text-center">
-          <div className="bg-zinc-50 border border-zinc-200 rounded-lg p-1.5">
-            <div className="text-[10px] font-bold text-blue-600">1. 3回当てて割る</div>
-            <div className="text-[9px] text-zinc-500 leading-tight mt-0.5">
-              100%→70%→40%→0%で貫通
-            </div>
-          </div>
-          <div className="bg-zinc-50 border border-zinc-200 rounded-lg p-1.5">
-            <div className="text-[10px] font-bold text-amber-600">2. ★枠で連鎖削り</div>
-            <div className="text-[9px] text-zinc-500 leading-tight mt-0.5">
-              ★マーク枠を壊すと周囲一掃
-            </div>
-          </div>
-          <div className="bg-zinc-50 border border-zinc-200 rounded-lg p-1.5">
-            <div className="text-[10px] font-bold text-emerald-600">3. 早押し回答</div>
-            <div className="text-[9px] text-zinc-500 leading-tight mt-0.5">
-              分かった瞬間に回答して高得点
-            </div>
-          </div>
+      {/* ゆったりスクロール可能なコース選択カードリスト（人間目線で読みやすいレイアウト） */}
+      <div className="flex-1 min-h-0 overflow-y-auto py-2 pr-1 space-y-1.5">
+        <div className="flex items-center justify-between px-1">
+          <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider">
+            出題コース選択（全9コース・100問収録）
+          </span>
+          <span className="text-[10px] text-zinc-400">
+            スクロールしてお好きなコースを選択
+          </span>
+        </div>
+
+        <div className="space-y-1.5">
+          {COURSE_OPTIONS.map((course) => {
+            const isSelected = selectedCourse === course.id;
+            const isAll100 = course.id === 'ALL_STAGES';
+            return (
+              <button
+                key={course.id}
+                type="button"
+                onClick={() => {
+                  setSelectedCourse(course.id);
+                  soundEngine.playBounce(true);
+                }}
+                className={`w-full p-2.5 rounded-2xl text-left border transition cursor-pointer flex items-center justify-between gap-3 ${
+                  isSelected
+                    ? isAll100
+                      ? 'bg-amber-50/90 border-amber-500 text-amber-950 shadow-sm ring-2 ring-amber-500/30'
+                      : 'bg-blue-50/90 border-blue-500 text-blue-950 shadow-sm ring-2 ring-blue-500/30'
+                    : isAll100
+                      ? 'bg-amber-50/40 hover:bg-amber-50/70 border-amber-200/80 text-amber-900'
+                      : 'bg-zinc-50 hover:bg-zinc-100 border-zinc-200/80 text-zinc-800'
+                }`}
+              >
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs sm:text-sm font-bold truncate">
+                      {course.title}
+                    </span>
+                    <span className="text-[10px] text-zinc-500 font-mono">
+                      （{course.stageCount}問）
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-zinc-500 mt-0.5 line-clamp-1">
+                    {course.description}
+                  </p>
+                </div>
+                <span
+                  className={`text-[10px] font-medium px-2 py-0.5 rounded-full shrink-0 ${
+                    isSelected
+                      ? isAll100
+                        ? 'bg-amber-200 text-amber-900 font-bold'
+                        : 'bg-blue-200 text-blue-800 font-bold'
+                      : isAll100
+                        ? 'bg-amber-100 text-amber-800'
+                        : 'bg-zinc-200/80 text-zinc-600'
+                  }`}
+                >
+                  {course.badge}
+                </span>
+              </button>
+            );
+          })}
         </div>
       </div>
 
-      {/* コース選択 ＆ モード切替 ＆ スタートボタン */}
-      <div className="space-y-1.5 shrink-0 pt-1">
-        {/* コースセレクター */}
-        <div>
-          <div className="flex items-center justify-between mb-1 px-1">
-            <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider">
-              出題コース選択
-            </span>
-            <span className="text-[10px] text-blue-600 font-medium truncate max-w-[200px]">
-              {selectedCourseObj?.description}
-            </span>
-          </div>
-          <div className="grid grid-cols-2 gap-1.5">
-            {COURSE_OPTIONS.map((course) => {
-              const isSelected = selectedCourse === course.id;
-              const isAll100 = course.id === 'ALL_STAGES';
-              return (
-                <button
-                  key={course.id}
-                  type="button"
-                  onClick={() => {
-                    setSelectedCourse(course.id);
-                    soundEngine.playBounce(true);
-                  }}
-                  className={`min-h-10 px-2.5 py-1 rounded-xl text-left border transition cursor-pointer flex items-center justify-between gap-1.5 ${
-                    isAll100 ? 'col-span-2' : ''
-                  } ${
-                    isSelected
-                      ? isAll100
-                        ? 'bg-amber-50/90 border-amber-500 text-amber-950 shadow-xs ring-1 ring-amber-500/30'
-                        : 'bg-blue-50/80 border-blue-500 text-blue-950 shadow-xs ring-1 ring-blue-500/30'
-                      : isAll100
-                        ? 'bg-amber-50/40 hover:bg-amber-50/70 border-amber-200 text-amber-900 font-bold'
-                        : 'bg-zinc-50 hover:bg-zinc-100 border-zinc-200 text-zinc-700'
-                  }`}
-                >
-                  <span className="text-xs font-bold leading-tight truncate">
-                    {course.title}
-                  </span>
-                  <span
-                    className={`text-[9px] font-medium px-1.5 py-0.5 rounded-full shrink-0 ${
-                      isSelected
-                        ? isAll100
-                          ? 'bg-amber-200/90 text-amber-900 font-bold'
-                          : 'bg-blue-200/80 text-blue-800'
-                        : isAll100
-                          ? 'bg-amber-100 text-amber-800'
-                          : 'bg-zinc-200/70 text-zinc-600'
-                    }`}
-                  >
-                    {course.badge}
-                  </span>
-                </button>
-              );
-            })}
-          </div>
-        </div>
-
-        <div className="grid grid-cols-2 gap-1 p-0.5 bg-zinc-100 border border-zinc-200 rounded-lg">
+      {/* モード切替 ＆ スタートボタン（下部固定） */}
+      <div className="pt-2 border-t border-zinc-100 space-y-1.5 shrink-0">
+        <div className="grid grid-cols-2 gap-1 p-0.5 bg-zinc-100 border border-zinc-200 rounded-xl">
           <button
             type="button"
             onClick={() => setIsPracticeMode(false)}
-            className={`min-h-7 py-1 px-2 rounded-md text-[11px] font-semibold transition cursor-pointer whitespace-nowrap ${
+            className={`min-h-7 py-1 px-2 rounded-lg text-[11px] font-semibold transition cursor-pointer whitespace-nowrap ${
               !isPracticeMode
                 ? 'bg-white text-zinc-900 shadow-xs border border-zinc-200'
                 : 'text-zinc-500 hover:text-zinc-800'
@@ -307,7 +289,7 @@ export const TitleScreen: React.FC<TitleScreenProps> = ({
           <button
             type="button"
             onClick={() => setIsPracticeMode(true)}
-            className={`min-h-7 py-1 px-2 rounded-md text-[11px] font-semibold transition cursor-pointer whitespace-nowrap ${
+            className={`min-h-7 py-1 px-2 rounded-lg text-[11px] font-semibold transition cursor-pointer whitespace-nowrap ${
               isPracticeMode
                 ? 'bg-white text-zinc-900 shadow-xs border border-zinc-200'
                 : 'text-zinc-500 hover:text-zinc-800'
@@ -320,7 +302,7 @@ export const TitleScreen: React.FC<TitleScreenProps> = ({
         <button
           type="button"
           onClick={onStartGame}
-          className="w-full min-h-11 py-2 rounded-2xl bg-zinc-900 hover:bg-zinc-800 active:scale-[0.99] text-white font-bold text-sm shadow-md transition flex items-center justify-center gap-2 cursor-pointer"
+          className="w-full min-h-12 py-2.5 rounded-2xl bg-zinc-900 hover:bg-zinc-800 active:scale-[0.99] text-white font-bold text-sm sm:text-base shadow-md transition flex items-center justify-center gap-2 cursor-pointer"
         >
           <Play className="w-4 h-4 fill-current" />
           <span>ゲームスタート</span>

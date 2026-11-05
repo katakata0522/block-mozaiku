@@ -1938,7 +1938,7 @@ export default function App() {
 
               {phase !== 'ANSWERING' && phase !== 'LAST_CHANCE' && phase !== 'STAGE_RESULT' && (
                 <div className="w-full flex items-center gap-2">
-                  {/* 左移動ボタン */}
+                  {/* 左微調整ボタン */}
                   <button
                     type="button"
                     disabled={phase !== 'PLAYING' && phase !== 'READY'}
@@ -1955,34 +1955,14 @@ export default function App() {
                     onPointerLeave={() => {
                       buttonHoldRef.current.left = false;
                     }}
-                    className="touch-drag-zone min-w-11 min-h-11 rounded-xl bg-white hover:bg-zinc-100 active:bg-zinc-200 border border-zinc-200 text-zinc-700 flex items-center justify-center disabled:opacity-40 transition cursor-pointer shrink-0 shadow-xs"
+                    className="touch-drag-zone min-w-10 min-h-11 px-2.5 rounded-xl bg-white hover:bg-zinc-100 active:bg-zinc-200 border border-zinc-200 text-zinc-700 flex items-center justify-center disabled:opacity-40 transition cursor-pointer shrink-0 shadow-xs"
                     aria-label="左へ移動"
+                    title="左へ移動"
                   >
                     <ChevronLeft className="w-5 h-5" />
                   </button>
 
-                  {/* パドルスライドトラック */}
-                  <div
-                    onPointerDown={(e) => {
-                      if (phase !== 'PLAYING' && phase !== 'READY') return;
-                      e.currentTarget.setPointerCapture(e.pointerId);
-                      const rect = e.currentTarget.getBoundingClientRect();
-                      updatePaddleFromClientX(e.clientX, rect);
-                    }}
-                    onPointerMove={(e) => {
-                      if (phase !== 'PLAYING' && phase !== 'READY') return;
-                      if (e.buttons === 0 && e.pressure === 0) return;
-                      const rect = e.currentTarget.getBoundingClientRect();
-                      updatePaddleFromClientX(e.clientX, rect);
-                    }}
-                    className="touch-drag-zone flex-1 min-h-11 rounded-xl bg-white border border-zinc-200 px-3 flex items-center justify-center cursor-ew-resize select-none shadow-xs"
-                  >
-                    <span className="text-xs font-medium text-zinc-500 whitespace-nowrap">
-                      ◀ スライドでパドル操作 ▶
-                    </span>
-                  </div>
-
-                  {/* 右移動ボタン */}
+                  {/* 右微調整ボタン */}
                   <button
                     type="button"
                     disabled={phase !== 'PLAYING' && phase !== 'READY'}
@@ -1999,25 +1979,27 @@ export default function App() {
                     onPointerLeave={() => {
                       buttonHoldRef.current.right = false;
                     }}
-                    className="touch-drag-zone min-w-11 min-h-11 rounded-xl bg-white hover:bg-zinc-100 active:bg-zinc-200 border border-zinc-200 text-zinc-700 flex items-center justify-center disabled:opacity-40 transition cursor-pointer shrink-0 shadow-xs"
+                    className="touch-drag-zone min-w-10 min-h-11 px-2.5 rounded-xl bg-white hover:bg-zinc-100 active:bg-zinc-200 border border-zinc-200 text-zinc-700 flex items-center justify-center disabled:opacity-40 transition cursor-pointer shrink-0 shadow-xs"
                     aria-label="右へ移動"
+                    title="右へ移動"
                   >
                     <ChevronRight className="w-5 h-5" />
                   </button>
 
-                  {/* クリアへ直結する「回答する」プライマリボタン */}
+                  {/* メイン: クリアへ直結する「回答する」堂々ボタン（画面の主役） */}
                   <button
                     type="button"
                     disabled={phase !== 'PLAYING' && phase !== 'READY'}
                     onClick={handleOpenAnswerModal}
-                    className={`min-h-11 px-4 sm:px-5 rounded-xl active:scale-[0.99] disabled:opacity-40 font-bold text-xs sm:text-sm shadow-md transition flex items-center justify-center gap-2 cursor-pointer whitespace-nowrap shrink-0 ${
+                    className={`flex-1 min-h-11 px-4 rounded-xl active:scale-[0.99] disabled:opacity-40 font-bold text-sm shadow-md transition flex items-center justify-center gap-2 cursor-pointer whitespace-nowrap ${
                       hasCluesRevealed
                         ? 'bg-emerald-600 hover:bg-emerald-500 text-white shadow-emerald-600/25 ring-2 ring-emerald-400/40'
                         : 'bg-zinc-900 hover:bg-zinc-800 text-white shadow-zinc-900/20'
                     }`}
-                    title="ショートカット: Enterキーで即座に回答欄を開く"
+                    title="何の写真か分かった瞬間にタップ！（Enterキーでも即座に開けます）"
                   >
-                    <span>回答する</span>
+                    <span className="text-base">💡</span>
+                    <span>何の写真か回答する</span>
                     <span className="font-mono tabular-nums text-xs bg-white/20 px-1.5 py-0.5 rounded">
                       +{stageMetrics.potentialNormalScore}
                     </span>
