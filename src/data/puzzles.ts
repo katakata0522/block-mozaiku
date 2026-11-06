@@ -1177,7 +1177,7 @@ export const PUZZLE_STAGES: PuzzleStage[] = [
       'coffeecup',
     ],
     acceptedKeywords: ['コーヒー', 'こーひー', 'コーヒーカップ', 'マグカップ', 'coffee'],
-    photoUrl: '',
+    photoUrl: '/photos/coffee_cup.jpg',
     remotePhotoUrl: '',
     description: 'カフェの木目テーブルに置かれた白いマグカップと湯気のモダンベクターアート。',
     provenance: {
@@ -1210,7 +1210,7 @@ export const PUZZLE_STAGES: PuzzleStage[] = [
       'balloon',
     ],
     acceptedKeywords: ['気球', 'ききゅう', '熱気球', 'バルーン', 'balloon'],
-    photoUrl: '',
+    photoUrl: '/photos/hot_air_balloon.jpg',
     remotePhotoUrl: '',
     description: '青空と雲の中を飛ぶカラフルな熱気球のオリジナルベクターアート。',
     provenance: {
@@ -1241,7 +1241,7 @@ export const PUZZLE_STAGES: PuzzleStage[] = [
       'lighthouse',
     ],
     acceptedKeywords: ['灯台', 'とうだい', 'ライトハウス', 'lighthouse'],
-    photoUrl: '',
+    photoUrl: '/photos/lighthouse.jpg',
     remotePhotoUrl: '',
     description: '夜の荒波の岬に立ち光芒を放つ灯台のオリジナルベクターアート。',
     provenance: {
@@ -1271,7 +1271,7 @@ export const PUZZLE_STAGES: PuzzleStage[] = [
       'windmill',
     ],
     acceptedKeywords: ['風車', 'ふうしゃ', 'オランダ風車', 'windmill'],
-    photoUrl: '',
+    photoUrl: '/photos/windmill_stage32.jpg',
     remotePhotoUrl: '',
     description: 'チューリップ畑にそびえる木製オランダ風車のオリジナルベクターアート。',
     provenance: {
@@ -1306,7 +1306,7 @@ export const PUZZLE_STAGES: PuzzleStage[] = [
       'turntable',
     ],
     acceptedKeywords: ['レコード', 'れこーど', 'レコードプレーヤー', 'ターンテーブル', 'record'],
-    photoUrl: '',
+    photoUrl: '/photos/record_player.jpg',
     remotePhotoUrl: '',
     description: '木目キャビネットと黒い円盤のレコードプレーヤーのオリジナルベクターアート。',
     provenance: {
@@ -1336,7 +1336,7 @@ export const PUZZLE_STAGES: PuzzleStage[] = [
       'cactus',
     ],
     acceptedKeywords: ['サボテン', 'さぼてん', 'カクタス', 'cactus'],
-    photoUrl: '',
+    photoUrl: '/photos/cactus.jpg',
     remotePhotoUrl: '',
     description: 'オレンジ色の砂漠の夕焼けにそびえる緑のサボテンのオリジナルベクターアート。',
     provenance: {
@@ -3549,12 +3549,6 @@ export function renderStageArtworkToCanvas(
   ctx.save();
   ctx.clearRect(0, 0, width, height);
 
-  if (stageId >= 101 && stageId <= 200) {
-    renderStage101To200Artwork(ctx, stageId, width, height);
-    ctx.restore();
-    return;
-  }
-
   const loadedImg = LOADED_STAGE_IMAGES.get(stageId);
   if (loadedImg && loadedImg.complete && loadedImg.naturalWidth > 0) {
     if (stageId === 1) {
@@ -3781,7 +3775,68 @@ export function renderStageArtworkToCanvas(
       focusY = 0.50; // りんご：真っ赤な完熟りんご
     } else if (stageId === 92) {
       focusY = 0.50; // バナナ：黄色い房のバナナ
+    } else if (stageId === 135) {
+      focusY = 0.28; // 福沢諭吉：一万円札の有名な鋭い眼光・羽織・顔立ち
+    } else if (stageId === 134) {
+      focusY = 0.25; // 野口英世：千円札の学者肖像
+    } else if (stageId === 136) {
+      focusY = 0.28; // 夏目漱石：旧千円札の肖像
+    } else if (stageId === 131) {
+      focusY = 0.25; // ニュートン
+    } else if (stageId === 132) {
+      focusY = 0.25; // エジソン
+    } else if (stageId === 133) {
+      focusY = 0.25; // ダ・ヴィンチ
+    } else if (stageId === 137) {
+      focusY = 0.25; // シェイクスピア
+    } else if (stageId === 138) {
+      focusY = 0.25; // モーツァルト
+    } else if (stageId === 139) {
+      focusY = 0.25; // バッハ
+    } else if (stageId === 140) {
+      focusY = 0.25; // ショパン
+    } else if (stageId === 141) {
+      focusY = 0.25; // コロンブス
+    } else if (stageId === 142) {
+      focusY = 0.25; // マゼラン
+    } else if (stageId === 143) {
+      focusY = 0.25; // ダーウィン
+    } else if (stageId === 101) {
+      focusY = 0.40; // 姫路城：白鷺城の大天守閣
+    } else if (stageId === 102) {
+      focusY = 0.50; // 雷門：巨大赤提灯
+    } else if (stageId === 103) {
+      focusY = 0.35; // 東大寺大仏
+    } else if (stageId === 104) {
+      focusY = 0.45; // 平等院鳳凰堂
+    } else if (stageId === 105) {
+      focusY = 0.40; // 大阪城
+    } else if (stageId === 116) {
+      focusY = 0.50; // ピサの斜塔
+    } else if (stageId === 117) {
+      focusY = 0.45; // スフィンクス
+    } else if (stageId === 118) {
+      focusY = 0.45; // パルテノン神殿
+    } else if (stageId === 119) {
+      focusY = 0.30; // ビッグベン
+    } else if (stageId === 120) {
+      focusY = 0.45; // 凱旋門
+    } else if (stageId === 121) {
+      focusY = 0.45; // モアイ像
+    } else if (stageId === 122) {
+      focusY = 0.45; // タワーブリッジ
+    } else if (stageId === 123) {
+      focusY = 0.45; // ノイシュヴァンシュタイン城
+    } else if (stageId === 125) {
+      focusY = 0.50; // ゴールデンゲートブリッジ
+    } else if (stageId === 126) {
+      focusY = 0.45; // アンコールワット
+    } else if (stageId === 152) {
+      focusY = 0.30; // ミロのヴィーナス
+    } else if (stageId === 186) {
+      focusY = 0.50; // ブラックホール
     }
+
 
     if (imgRatio > targetRatio) {
       sw = imgH * targetRatio;
@@ -3851,6 +3906,8 @@ export function renderStageArtworkToCanvas(
     renderHourglassScene(ctx, width, height);
   } else if (stageId === 100) {
     renderGlobeScene(ctx, width, height);
+  } else if (stageId >= 101 && stageId <= 200) {
+    renderStage101To200Artwork(ctx, stageId, width, height);
   } else {
     renderUmbrellaScene(ctx, width, height);
   }
